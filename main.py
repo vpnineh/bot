@@ -4,15 +4,14 @@ import json
 import base64
 import requests
 import urllib.parse
+import time
 from bs4 import BeautifulSoup
 
 # ================= تنظیمات =================
-# آیدی کانال‌های عمومی تلگرام بدون @ (هر چند تا که می‌خواهید اضافه کنید)
-SOURCE_CHANNELS = ['AR14N24B', ''] 
-NEW_REMARK = "🚀@VPNine1" # ریمارک کانال شما
-CHUNK_SIZE = 20 # تعداد کانفیگ در هر پیام
+SOURCE_CHANNELS = ['v2rayng_org', 'v2ray_outline_ir'] # کانال‌های مبدا
+CHANNEL_ID = "VPNine1" # اسم کانال شما برای نمایش در ریمارک (بدون @)
+CHUNK_SIZE = 20 # تعداد در هر پیام
 
-# متغیرهای محیطی که از گیت‌هاب سکرت خوانده می‌شوند
 BOT_TOKEN = os.environ.get('BOT_TOKEN')
 TARGET_CHANNEL = os.environ.get('TARGET_CHANNEL')
 # ===========================================
@@ -28,6 +27,41 @@ def load_history():
 def save_history(history):
     with open(HISTORY_FILE, 'w', encoding='utf-8') as f:
         f.write('\n'.join(list(history)[-2000:]))
+
+def extract_host(config):
+    """استخراج آی‌پی یا دامنه از کانفیگ برای پیدا کردن پرچم"""
+    if config.startswith('vmess://'):
+        try:
+            b64_str = config[8:]
+            b64_str += "=" * ((4 - len(b64_str) % 4) % 4)
+            data = json.loads(base64.b64decode(b64_str).decode('utf-8'))
+            return data.get('add') or data.get('host')
+        except:
+            return None
+    else:
+        # برای vless, trojan و ...
+        match = re.search(r'://(?:[^@/]+@)?([^:/?#]+)', config)
+        if match:
+            return match.group(1)
+    return None
+
+def get_country_flag(host):
+    """دریافت کد کشور از آی‌پی و تبدیل آن به ایموجی پرچم"""
+    if not host: 
+        return "🌍"
+    try:
+        # پاکسازی پورت از انتهای آی‌پی
+        clean_host = host.split(':')[0]
+        # استفاده از API رایگان برای یافتن لوکیشن
+        resp = requests.get(f"http://ip-api.com/json/{clean_host}?fields=countryCode", timeout=5)
+        if resp.status_code == 200:
+            cc = resp.json().get('countryCode')
+            if cc:
+                # فرمول تبدیل کد 2 حرفی کشور به ایموجی پرچم
+                return chr(ord(cc[0].upper()) + 127397) + chr(ord(cc[1].upper()) + 127397)
+    except:
+        pass
+    return "🌍" # پرچم پیش‌فرض در صورت خطا
 
 def update_remark(config, remark):
     if config.startswith('vmess://'):
@@ -91,7 +125,19 @@ def main():
         base_config = config.split('#')[0] if not config.startswith('vmess://') else config
         
         if base_config not in history:
-            updated_config = update_remark(config, NEW_REMARK)
+            # ۱. استخراج آی‌پی/دامنه
+            host = extract_host(config)
+            
+            # ۲. پیدا کردن پرچم
+            flag = get_country_flag(host) if host else "🌍"
+            if host:
+                time.sleep(1.5) # تاخیر عمدی برای جلوگیری از بلاک شدن توسط سایت IP-API
+                
+            # ۳. ساخت ریمارک جدید (مثال: 🚀@VPNine1 - 🇩🇪)
+            final_remark = f"🚀@{CHANNEL_ID} - {flag}"
+            
+            # ۴. اعمال در کانفیگ
+            updated_config = update_remark(config, final_remark)
             valid_new_configs.append(updated_config)
             history.add(base_config)
 
@@ -99,11 +145,13 @@ def main():
     
     for i in range(0, added_count, CHUNK_SIZE):
         chunk = valid_new_configs[i:i + CHUNK_SIZE]
-        message_text = ""
-        for c in chunk:
-            message_text += f"<code>{c}</code>\n\n"
         
-        message_text += f"🆔 {TARGET_CHANNEL}"
+        message_text = "<b>New Proxies Available ⚡️</b>\n\n"
+        # قرار دادن کانفیگ‌ها به صورت چسبیده به هم برای فشرده شدن ظاهر پیام
+        for c in chunk:
+            message_text += f"<code>{c}</code>\n"
+        
+        message_text += f"\n🆔 @{CHANNEL_ID}"
         send_to_telegram(message_text)
 
     save_history(history)
