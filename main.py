@@ -8,8 +8,8 @@ from bs4 import BeautifulSoup
 
 # ================= تنظیمات =================
 # آیدی کانال‌های عمومی تلگرام بدون @ (هر چند تا که می‌خواهید اضافه کنید)
-SOURCE_CHANNELS = ['v2rayng_org', 'v2ray_outline_ir'] 
-NEW_REMARK = "MyChannelRemark 🚀" # ریمارک کانال شما
+SOURCE_CHANNELS = ['AR14N24B', ''] 
+NEW_REMARK = "🚀@VPNine1" # ریمارک کانال شما
 CHUNK_SIZE = 20 # تعداد کانفیگ در هر پیام
 
 # متغیرهای محیطی که از گیت‌هاب سکرت خوانده می‌شوند
