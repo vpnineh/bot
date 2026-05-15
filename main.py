@@ -5,7 +5,7 @@ import base64
 import requests
 import urllib.parse
 import time
-import html # اضافه شده برای حل مشکل ارور HTML تلگرام
+import html
 from bs4 import BeautifulSoup
 
 # ================= تنظیمات =================
@@ -77,7 +77,6 @@ def send_to_telegram(text):
         'disable_web_page_preview': True
     }
     resp = requests.post(url, json=payload)
-    # چاپ ارورهای احتمالی تلگرام برای عیب‌یابی
     if resp.status_code != 200:
         print(f"Telegram API Error: {resp.text}")
 
@@ -110,12 +109,18 @@ def main():
         chunk = valid_v2ray[i:i + V2RAY_CHUNK_SIZE]
         msg = "<b>New Proxies Available ⚡️</b>\n\n"
         
+        # ۱. باز کردن یک کوت کلی برای تمام کانفیگ‌های این پیام
+        msg += "<blockquote expandable>\n"
+        
         for link in chunk:
             updated_link = update_remark(link, f"🚀@{CHANNEL_ID}")
-            # اسکیپ کردن کاراکترهای حساس برای جلوگیری از ارور تلگرام
             escaped_link = html.escape(updated_link)
-            msg += f"<blockquote expandable><code>{escaped_link}</code></blockquote>\n"
+            # ۲. قرار دادن کانفیگ‌ها زیر هم داخل همون کوت
+            msg += f"<code>{escaped_link}</code>\n\n"
             
+        # ۳. بستن کوت
+        msg += "</blockquote>"
+        
         msg += f"\n🆔 @{CHANNEL_ID}"
         send_to_telegram(msg)
         total_sent += len(chunk)
@@ -125,6 +130,7 @@ def main():
             time.sleep(DELAY_BETWEEN_MSGS)
 
     # ================= پردازش و ارسال پروکسی تلگرام =================
+    # (همون‌طور که خواستی اینا به صورت لینک شیشه‌ای می‌مونن و تو کوت نمیرن)
     for i in range(0, len(valid_mtproto), MTPROTO_CHUNK_SIZE):
         chunk = valid_mtproto[i:i + MTPROTO_CHUNK_SIZE]
         msg = "<b>New MTProto Proxies 🛡</b>\n\n"
