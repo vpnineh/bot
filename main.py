@@ -8,9 +8,11 @@ import time
 from bs4 import BeautifulSoup
 
 # ================= تنظیمات =================
-SOURCE_CHANNELS = ['v2rayng_org', 'v2ray_outline_ir'] # کانال‌های مبدا
-CHANNEL_ID = "VPNine1" # اسم کانال شما برای نمایش در ریمارک (بدون @)
-CHUNK_SIZE = 20 # تعداد در هر پیام
+SOURCE_CHANNELS = ['AR14N24B', 'MTPROTO_PROXY01', 'NormanV2ray'] 
+CHANNEL_ID = "VPNine1" 
+V2RAY_CHUNK_SIZE = 30    # کاهش به ۱۵ عدد برای جلوگیری از ارور لیمیت کاراکتر تلگرام
+MTPROTO_CHUNK_SIZE = 10  
+DELAY_BETWEEN_MSGS = 30  
 
 BOT_TOKEN = os.environ.get('BOT_TOKEN')
 TARGET_CHANNEL = os.environ.get('TARGET_CHANNEL')
@@ -26,10 +28,9 @@ def load_history():
 
 def save_history(history):
     with open(HISTORY_FILE, 'w', encoding='utf-8') as f:
-        f.write('\n'.join(list(history)[-2000:]))
+        f.write('\n'.join(list(history)[-3000:]))
 
 def extract_host(config):
-    """استخراج آی‌پی یا دامنه از کانفیگ برای پیدا کردن پرچم"""
     if config.startswith('vmess://'):
         try:
             b64_str = config[8:]
@@ -38,30 +39,26 @@ def extract_host(config):
             return data.get('add') or data.get('host')
         except:
             return None
+    elif 'proxy?server=' in config:
+        match = re.search(r'server=([^&]+)', config)
+        if match: return match.group(1)
     else:
-        # برای vless, trojan و ...
         match = re.search(r'://(?:[^@/]+@)?([^:/?#]+)', config)
-        if match:
-            return match.group(1)
+        if match: return match.group(1)
     return None
 
 def get_country_flag(host):
-    """دریافت کد کشور از آی‌پی و تبدیل آن به ایموجی پرچم"""
-    if not host: 
-        return "🌍"
+    if not host: return "🌍"
     try:
-        # پاکسازی پورت از انتهای آی‌پی
         clean_host = host.split(':')[0]
-        # استفاده از API رایگان برای یافتن لوکیشن
         resp = requests.get(f"http://ip-api.com/json/{clean_host}?fields=countryCode", timeout=5)
         if resp.status_code == 200:
             cc = resp.json().get('countryCode')
             if cc:
-                # فرمول تبدیل کد 2 حرفی کشور به ایموجی پرچم
                 return chr(ord(cc[0].upper()) + 127397) + chr(ord(cc[1].upper()) + 127397)
     except:
         pass
-    return "🌍" # پرچم پیش‌فرض در صورت خطا
+    return "🌍"
 
 def update_remark(config, remark):
     if config.startswith('vmess://'):
@@ -76,31 +73,29 @@ def update_remark(config, remark):
         except Exception:
             return config
     else:
-        if '#' in config:
-            config = config.split('#')[0]
-        config = config.rstrip(')')
-        return f"{config}#{urllib.parse.quote(remark)}"
+        if '#' in config: config = config.split('#')[0]
+        return f"{config.rstrip(')')}#{urllib.parse.quote(remark)}"
 
-def fetch_configs():
-    configs = set()
-    pattern = r'(?:vless|vmess|trojan|ss|ssr|tuic|hysteria2?)://[^\s"\'<>\n]+'
+def fetch_raw_configs():
+    v2ray_links, mtproto_links = set(), set()
+    pattern_v2ray = r'(?:vless|vmess|trojan|ss|ssr|tuic|hysteria2?)://[^\s"\'<>\n]+'
+    pattern_tg = r'(?:https?://t\.me/proxy\?[^\s"\'<>\n]+|tg://proxy\?[^\s"\'<>\n]+)'
     
     for channel in SOURCE_CHANNELS:
         try:
             url = f"https://t.me/s/{channel}"
-            headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
+            headers = {'User-Agent': 'Mozilla/5.0'}
             response = requests.get(url, headers=headers, timeout=15)
             if response.status_code == 200:
                 soup = BeautifulSoup(response.text, 'html.parser')
                 messages = soup.find_all('div', class_='tgme_widget_message_text')
                 for msg in messages:
                     text = msg.get_text(separator=' ')
-                    found = re.findall(pattern, text)
-                    for c in found:
-                        configs.add(c)
+                    for c in re.findall(pattern_v2ray, text): v2ray_links.add(c)
+                    for c in re.findall(pattern_tg, text): mtproto_links.add(c)
         except Exception as e:
             print(f"Error fetching from {channel}: {e}")
-    return list(configs)
+    return list(v2ray_links), list(mtproto_links)
 
 def send_to_telegram(text):
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
@@ -114,48 +109,70 @@ def send_to_telegram(text):
 
 def main():
     if not BOT_TOKEN or not TARGET_CHANNEL:
-        print("Error: BOT_TOKEN or TARGET_CHANNEL is missing.")
+        print("Error: Missing credentials.")
         return
 
     history = load_history()
-    new_configs = fetch_configs()
-    valid_new_configs = []
-
-    for config in new_configs:
-        base_config = config.split('#')[0] if not config.startswith('vmess://') else config
-        
-        if base_config not in history:
-            # ۱. استخراج آی‌پی/دامنه
-            host = extract_host(config)
-            
-            # ۲. پیدا کردن پرچم
-            flag = get_country_flag(host) if host else "🌍"
-            if host:
-                time.sleep(1.5) # تاخیر عمدی برای جلوگیری از بلاک شدن توسط سایت IP-API
-                
-            # ۳. ساخت ریمارک جدید (مثال: 🚀@VPNine1 - 🇩🇪)
-            final_remark = f"🚀@{CHANNEL_ID} - {flag}"
-            
-            # ۴. اعمال در کانفیگ
-            updated_config = update_remark(config, final_remark)
-            valid_new_configs.append(updated_config)
-            history.add(base_config)
-
-for i in range(0, added_count, CHUNK_SIZE):
-        chunk = valid_new_configs[i:i + CHUNK_SIZE]
-        
-        message_text = "<b>New Proxies Available ⚡️</b>\n"
-        # اضافه کردن تگ باکس جمع‌شونده تلگرام
-        message_text += "<blockquote expandable>"
-        for c in chunk:
-            message_text += f"<code>{c}</code>\n"
-        message_text += "</blockquote>\n"
-        
-        message_text += f"🆔 @{CHANNEL_ID}"
-        send_to_telegram(message_text)
+    new_v2ray, new_mtproto = fetch_raw_configs()
     
+    valid_v2ray = []
+    valid_mtproto = []
+
+    for link in new_v2ray:
+        base = link.split('#')[0] if not link.startswith('vmess') else link
+        if base not in history:
+            valid_v2ray.append(link)
+            history.add(base)
+            
+    for link in new_mtproto:
+        if link not in history:
+            valid_mtproto.append(link)
+            history.add(link)
+
+    total_sent = 0
+
+    # ================= پردازش و ارسال V2Ray =================
+    for i in range(0, len(valid_v2ray), V2RAY_CHUNK_SIZE):
+        chunk = valid_v2ray[i:i + V2RAY_CHUNK_SIZE]
+        msg = "<b>New Proxies Available ⚡️</b>\n\n"
+        
+        for link in chunk:
+            host = extract_host(link)
+            flag = get_country_flag(host)
+            updated_link = update_remark(link, f"🚀@{CHANNEL_ID} - {flag}")
+            # استفاده از نقل‌قول جمع‌شونده به همراه تگ کپی
+            msg += f"<blockquote expandable><code>{updated_link}</code></blockquote>\n"
+            time.sleep(1.2) 
+            
+        msg += f"\n🆔 @{CHANNEL_ID}"
+        send_to_telegram(msg)
+        total_sent += len(chunk)
+        
+        if i + V2RAY_CHUNK_SIZE < len(valid_v2ray) or valid_mtproto:
+            print(f"Sent {len(chunk)} V2ray configs. Waiting {DELAY_BETWEEN_MSGS} seconds...")
+            time.sleep(DELAY_BETWEEN_MSGS)
+
+    # ================= پردازش و ارسال پروکسی تلگرام =================
+    for i in range(0, len(valid_mtproto), MTPROTO_CHUNK_SIZE):
+        chunk = valid_mtproto[i:i + MTPROTO_CHUNK_SIZE]
+        msg = "<b>New MTProto Proxies 🛡</b>\n\n"
+        
+        for idx, link in enumerate(chunk, 1):
+            host = extract_host(link)
+            flag = get_country_flag(host)
+            msg += f"🔹 <a href='{link}'>Proxy {idx} - {flag}</a>\n"
+            time.sleep(1.2)
+            
+        msg += f"\n🆔 @{CHANNEL_ID}"
+        send_to_telegram(msg)
+        total_sent += len(chunk)
+        
+        if i + MTPROTO_CHUNK_SIZE < len(valid_mtproto):
+            print(f"Sent {len(chunk)} MTProto configs. Waiting {DELAY_BETWEEN_MSGS} seconds...")
+            time.sleep(DELAY_BETWEEN_MSGS)
+
     save_history(history)
-    print(f"Process finished. {added_count} new configs forwarded.")
+    print(f"Process finished. Successfully sent {total_sent} new configs.")
 
 if __name__ == '__main__':
     main()
