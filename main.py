@@ -139,8 +139,8 @@ def main():
         # بستن کوت جمع شونده
         msg += "</blockquote>\n\n"
         
-        msg += "🌐 #v2ray #vless #vpn #config #کانفیگ\n"
         msg += f"🛡 <b>Join:</b> @{CHANNEL_ID}\n"
+        msg += "🌐 #v2ray #vless #vpn #config #کانفیگ\n"
         
         send_to_telegram(msg)
         total_sent += len(chunk)
@@ -160,9 +160,9 @@ def main():
             escaped_link = html.escape(link)
             msg += f"🔹 <a href='{escaped_link}'>Connect to Proxy {idx}</a>\n\n"
             
-        msg += "🌐 #mtproto #proxy\n"
         msg += f"🛡 <b>Join:</b> @{CHANNEL_ID}\n"
-        
+        msg += "🌐 #mtproto #proxy\n"
+
         send_to_telegram(msg)
         total_sent += len(chunk)
         
