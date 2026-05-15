@@ -108,7 +108,7 @@ def main():
     # ================= پردازش و ارسال V2Ray =================
     for i in range(0, len(valid_v2ray), V2RAY_CHUNK_SIZE):
         chunk = valid_v2ray[i:i + V2RAY_CHUNK_SIZE]
-        msg = "<b>New Proxies Available ⚡️</b>\n\n"
+        msg = "<b>New Configs Available ⚡️</b>\n\n"
         
         # ۱. باز کردن یک کوت کلی برای تمام کانفیگ‌های این پیام
         msg += "<blockquote expandable>\n"
