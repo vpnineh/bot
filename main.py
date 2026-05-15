@@ -141,19 +141,19 @@ def main():
             valid_new_configs.append(updated_config)
             history.add(base_config)
 
-    added_count = len(valid_new_configs)
-    
-    for i in range(0, added_count, CHUNK_SIZE):
+for i in range(0, added_count, CHUNK_SIZE):
         chunk = valid_new_configs[i:i + CHUNK_SIZE]
         
-        message_text = "<b>New Proxies Available ⚡️</b>\n\n"
-        # قرار دادن کانفیگ‌ها به صورت چسبیده به هم برای فشرده شدن ظاهر پیام
+        message_text = "<b>New Proxies Available ⚡️</b>\n"
+        # اضافه کردن تگ باکس جمع‌شونده تلگرام
+        message_text += "<blockquote expandable>"
         for c in chunk:
             message_text += f"<code>{c}</code>\n"
+        message_text += "</blockquote>\n"
         
-        message_text += f"\n🆔 @{CHANNEL_ID}"
+        message_text += f"🆔 @{CHANNEL_ID}"
         send_to_telegram(message_text)
-
+    
     save_history(history)
     print(f"Process finished. {added_count} new configs forwarded.")
 
