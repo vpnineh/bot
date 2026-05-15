@@ -11,9 +11,9 @@ from bs4 import BeautifulSoup
 # ================= تنظیمات =================
 SOURCE_CHANNELS = ['AR14N24B', 'MTPROTO_PROXY01', 'NormanV2ray'] 
 CHANNEL_ID = "VPNine1" 
-V2RAY_CHUNK_SIZE = 20    # حتماً روی ۱۵ بماند تا ارور لیمیت کاراکتر تلگرام ندهد
+V2RAY_CHUNK_SIZE = 15    # حتماً روی ۱۵ بماند تا ارور لیمیت کاراکتر تلگرام ندهد
 MTPROTO_CHUNK_SIZE = 10  
-DELAY_BETWEEN_MSGS = 15  
+DELAY_BETWEEN_MSGS = 30  
 
 BOT_TOKEN = os.environ.get('BOT_TOKEN')
 TARGET_CHANNEL = os.environ.get('TARGET_CHANNEL')
@@ -61,12 +61,10 @@ def fetch_raw_configs():
                 soup = BeautifulSoup(response.text, 'html.parser')
                 messages = soup.find_all('div', class_='tgme_widget_message_text')
                 for msg in messages:
-                    # ۱. استخراج پروکسی‌های عادی از متن
                     text = msg.get_text(separator=' ')
                     for c in re.findall(pattern_v2ray, text): v2ray_links.add(c)
                     for c in re.findall(pattern_tg, text): mtproto_links.add(c)
                     
-                    # ۲. استخراج پروکسی‌های مخفی در لینک‌های شیشه‌ای (href)
                     for a_tag in msg.find_all('a'):
                         href = a_tag.get('href')
                         if href:
@@ -119,23 +117,21 @@ def main():
         
         msg = "<b>💎 Premium V2Ray Servers</b>\n"
         msg += "<i>✅ Checked & High-Speed</i>\n\n"
+                
+        # تغییر کلیدی: استفاده از تگ pre داخل کوت برای کپی شدن کل بلوک با یک کلیک
+        msg += "<blockquote expandable><pre>"
         
-        msg += "<blockquote expandable>\n"
-        
-        # باز کردن یک تگ کدِ کلی
-        msg += "<code>"
         all_configs = ""
         for link in chunk:
             updated_link = update_remark(link, f"🚀@{CHANNEL_ID}")
             escaped_link = html.escape(updated_link)
             all_configs += f"{escaped_link}\n"
         
-        # پاک کردن فاصله اضافه خط آخر و بستن تگ کد
+        # پاک کردن فاصله اضافه خط آخر و بستن تگ‌ها
         msg += all_configs.strip()
-        msg += "</code>\n"
+        msg += "</pre></blockquote>\n"
         
-        msg += "</blockquote>\n"
-        msg += "🌐 #v2ray #config #proxy #کانفیگ\n"
+        msg += "🌐 #v2ray #vless #vmess #proxy\n"
         msg += f"🛡 <b>Join:</b> @{CHANNEL_ID}"
         
         send_to_telegram(msg)
@@ -156,7 +152,7 @@ def main():
             escaped_link = html.escape(link)
             msg += f"🔹 <a href='{escaped_link}'>Connect to Proxy {idx}</a>\n\n"
             
-        msg += "🌐 #mtproto #proxy #پروکسی\n"
+        msg += "🌐 #mtproto #پروکسی_تلگرام\n"
         msg += f"🛡 <b>Join:</b> @{CHANNEL_ID}"
         
         send_to_telegram(msg)
