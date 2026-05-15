@@ -11,9 +11,9 @@ from bs4 import BeautifulSoup
 # ================= تنظیمات =================
 SOURCE_CHANNELS = ['AR14N24B', 'MTPROTO_PROXY01', 'NormanV2ray'] 
 CHANNEL_ID = "VPNine1" 
-V2RAY_CHUNK_SIZE = 15    # حتماً روی ۱۵ بماند تا ارور لیمیت کاراکتر تلگرام ندهد
+V2RAY_CHUNK_SIZE = 20    # حتماً روی ۱۵ بماند تا ارور لیمیت کاراکتر تلگرام ندهد
 MTPROTO_CHUNK_SIZE = 10  
-DELAY_BETWEEN_MSGS = 30  
+DELAY_BETWEEN_MSGS = 15  
 
 BOT_TOKEN = os.environ.get('BOT_TOKEN')
 TARGET_CHANNEL = os.environ.get('TARGET_CHANNEL')
@@ -45,7 +45,6 @@ def update_remark(config, remark):
             return config
     else:
         if '#' in config: config = config.split('#')[0]
-        # در اینجا urllib.parse.quote حذف شد تا ایموجی و متن خام بماند
         return f"{config.rstrip(')')}#{remark}"
 
 def fetch_raw_configs():
@@ -121,16 +120,22 @@ def main():
         msg = "<b>💎 Premium V2Ray Servers</b>\n"
         msg += "<i>✅ Checked & High-Speed</i>\n\n"
         
-        msg += "👇 <i>جهت کپی، روی کانفیگ ضربه بزنید:</i>\n"
         msg += "<blockquote expandable>\n"
         
+        # باز کردن یک تگ کدِ کلی
+        msg += "<code>"
+        all_configs = ""
         for link in chunk:
             updated_link = update_remark(link, f"🚀@{CHANNEL_ID}")
             escaped_link = html.escape(updated_link)
-            msg += f"<code>{escaped_link}</code>\n\n"
-            
+            all_configs += f"{escaped_link}\n"
+        
+        # پاک کردن فاصله اضافه خط آخر و بستن تگ کد
+        msg += all_configs.strip()
+        msg += "</code>\n"
+        
         msg += "</blockquote>\n"
-        msg += "🌐 #v2ray #vless #vmess #proxy\n"
+        msg += "🌐 #v2ray #config #proxy #کانفیگ\n"
         msg += f"🛡 <b>Join:</b> @{CHANNEL_ID}"
         
         send_to_telegram(msg)
@@ -151,7 +156,7 @@ def main():
             escaped_link = html.escape(link)
             msg += f"🔹 <a href='{escaped_link}'>Connect to Proxy {idx}</a>\n\n"
             
-        msg += "🌐 #mtproto #پروکسی_تلگرام\n"
+        msg += "🌐 #mtproto #proxy #پروکسی\n"
         msg += f"🛡 <b>Join:</b> @{CHANNEL_ID}"
         
         send_to_telegram(msg)
