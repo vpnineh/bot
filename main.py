@@ -45,7 +45,8 @@ def update_remark(config, remark):
             return config
     else:
         if '#' in config: config = config.split('#')[0]
-        return f"{config.rstrip(')')}#{urllib.parse.quote(remark)}"
+        # در اینجا urllib.parse.quote حذف شد تا ایموجی و متن خام بماند
+        return f"{config.rstrip(')')}#{remark}"
 
 def fetch_raw_configs():
     v2ray_links, mtproto_links = set(), set()
