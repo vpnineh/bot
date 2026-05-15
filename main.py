@@ -9,9 +9,12 @@ import html
 from bs4 import BeautifulSoup
 
 # ================= تنظیمات =================
-SOURCE_CHANNELS = ['AR14N24B', 'MTPROTO_PROXY01', 'NormanV2ray'] 
+# اضافه کردن کانال‌های بیشتر برای اطمینان از وجود محتوای جدید
+SOURCE_CHANNELS = [
+    'AR14N24B', 'MTPROTO_PROXY01', 'NormanV2ray' 
+] 
 CHANNEL_ID = "VPNine1" 
-V2RAY_CHUNK_SIZE = 30    # تعداد کانفیگ در هر پیام
+V2RAY_CHUNK_SIZE = 30    
 MTPROTO_CHUNK_SIZE = 10  
 DELAY_BETWEEN_MSGS = 30  
 
@@ -41,11 +44,9 @@ def update_remark(config, remark):
             data['ps'] = remark
             new_b64 = base64.b64encode(json.dumps(data).encode('utf-8')).decode('utf-8')
             return f"vmess://{new_b64}"
-        except Exception:
-            return config
+        except: return config
     else:
         if '#' in config: config = config.split('#')[0]
-        # در اینجا urllib.parse.quote حذف شد تا ایموجی و متن خام بماند
         return f"{config.rstrip(')')}#{remark}"
 
 def fetch_raw_configs():
@@ -54,6 +55,7 @@ def fetch_raw_configs():
     pattern_tg = r'(?:https?://t\.me/proxy\?[^\s"\'<>\n]+|tg://proxy\?[^\s"\'<>\n]+)'
     
     for channel in SOURCE_CHANNELS:
+        print(f"Searching in channel: @{channel}...")
         try:
             url = f"https://t.me/s/{channel}"
             headers = {'User-Agent': 'Mozilla/5.0'}
@@ -80,6 +82,7 @@ def send_to_telegram(text):
     resp = requests.post(url, json=payload)
     if resp.status_code != 200:
         print(f"Telegram API Error: {resp.text}")
+    return resp.status_code == 200
 
 def main():
     if not BOT_TOKEN or not TARGET_CHANNEL:
@@ -88,6 +91,8 @@ def main():
 
     history = load_history()
     new_v2ray, new_mtproto = fetch_raw_configs()
+    
+    print(f"Found {len(new_v2ray)} V2Ray and {len(new_mtproto)} MTProto links in total.")
     
     valid_v2ray = []
     valid_mtproto = []
@@ -103,58 +108,42 @@ def main():
             valid_mtproto.append(link)
             history.add(link)
 
+    print(f"New unique configs to send: {len(valid_v2ray)} V2Ray, {len(valid_mtproto)} MTProto")
+
     total_sent = 0
 
-    # ================= پردازش و ارسال V2Ray =================
+    # ================= ارسال V2Ray =================
     for i in range(0, len(valid_v2ray), V2RAY_CHUNK_SIZE):
         chunk = valid_v2ray[i:i + V2RAY_CHUNK_SIZE]
-        
-        # هدر جدید، لوکس و اعتماد ساز
-        msg = "<b>💎 Premium V2Ray Servers</b>\n"
-        msg += "<i>✅ Checked & High-Speed</i>\n\n"
-        
-        msg += "<blockquote expandable>\n"
+        msg = "<b>💎 Premium V2Ray Servers</b>\n<i>✅ Checked & High-Speed</i>\n\n"
+        msg += "<blockquote expandable>"
         for link in chunk:
             updated_link = update_remark(link, f"🚀@{CHANNEL_ID}")
-            escaped_link = html.escape(updated_link)
-            msg += f"<code>{escaped_link}</code>\n\n"
+            msg += f"<code>{html.escape(updated_link)}</code>\n\n"
         msg += "</blockquote>\n"
+        msg += "<i>💡 متن بالا را برای کپی لمس کنید.</i>\n\n"
+        msg += "🌐 #v2ray #vless #proxy #فیلترشکن\n"
+        msg += f"🛡 <b>Join:</b> @{CHANNEL_ID}"
         
-        # فوتر پیام با هشتگ‌های ترند و دعوت به اقدام (CTA) قدرتمند
-        msg += "<i>💡 برای اتصال، متن بالا را کپی کرده و در برنامه وارد کنید.</i>\n\n"
-        msg += "🌐 #v2ray #vless #vmess #proxy #فیلترشکن_رایگان #پروکسی\n"
-        msg += f"🛡 <b>Join Securely:</b> @{CHANNEL_ID}"
-        
-        send_to_telegram(msg)
-        total_sent += len(chunk)
-        
-        if i + V2RAY_CHUNK_SIZE < len(valid_v2ray) or valid_mtproto:
-            print(f"Sent {len(chunk)} V2ray configs. Waiting {DELAY_BETWEEN_MSGS} seconds...")
-            time.sleep(DELAY_BETWEEN_MSGS)
+        if send_to_telegram(msg):
+            total_sent += len(chunk)
+            if i + V2RAY_CHUNK_SIZE < len(valid_v2ray) or valid_mtproto:
+                time.sleep(DELAY_BETWEEN_MSGS)
 
-    # ================= پردازش و ارسال پروکسی تلگرام =================
+    # ================= ارسال MTProto =================
     for i in range(0, len(valid_mtproto), MTPROTO_CHUNK_SIZE):
         chunk = valid_mtproto[i:i + MTPROTO_CHUNK_SIZE]
-        
-        msg = "<b>🛡 Premium MTProto Proxies</b>\n"
-        msg += "<i>⚡️ Anti-Filter Telegram</i>\n\n"
-        
-        # قرار دادن لینک‌های پروکسی داخل یک کوت ساده برای ظاهر تمیزتر
-        msg += "<blockquote>\n"
+        msg = "<b>🛡 Premium MTProto Proxies</b>\n<i>⚡️ Anti-Filter Telegram</i>\n\n<blockquote>\n"
         for idx, link in enumerate(chunk, 1):
-            escaped_link = html.escape(link)
-            msg += f"🔹 <a href='{escaped_link}'>Connect to Proxy {idx}</a>\n"
+            msg += f"🔹 <a href='{html.escape(link)}'>Connect to Proxy {idx}</a>\n"
         msg += "</blockquote>\n"
-            
-        msg += "🌐 #mtproto #telegram_proxy #پروکسی_تلگرام\n"
-        msg += f"🛡 <b>Join Securely:</b> @{CHANNEL_ID}"
+        msg += "🌐 #mtproto #پروکسی_تلگرام\n"
+        msg += f"🛡 <b>Join:</b> @{CHANNEL_ID}"
         
-        send_to_telegram(msg)
-        total_sent += len(chunk)
-        
-        if i + MTPROTO_CHUNK_SIZE < len(valid_mtproto):
-            print(f"Sent {len(chunk)} MTProto configs. Waiting {DELAY_BETWEEN_MSGS} seconds...")
-            time.sleep(DELAY_BETWEEN_MSGS)
+        if send_to_telegram(msg):
+            total_sent += len(chunk)
+            if i + MTPROTO_CHUNK_SIZE < len(valid_mtproto):
+                time.sleep(DELAY_BETWEEN_MSGS)
 
     save_history(history)
     print(f"Process finished. Successfully sent {total_sent} new configs.")
