@@ -2,9 +2,10 @@ name: Proxy Auto Forwarder
 
 on:
   schedule:
-   - cron: '10,40 * * * *'
+    # تغییر به دقیقه‌های غیر رند تا سیستم گیت‌هاب مجبور به ثبت مجدد شود
+    - cron: '14,43 * * * *'
   workflow_dispatch:
-
+  
 jobs:
   run-scraper:
     runs-on: ubuntu-latest
