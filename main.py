@@ -9,12 +9,11 @@ import html
 from bs4 import BeautifulSoup
 
 # ================= تنظیمات =================
-# اضافه کردن کانال‌های بیشتر برای اطمینان از وجود محتوای جدید
 SOURCE_CHANNELS = [
-    'AR14N24B', 'MTPROTO_PROXY01', 'NormanV2ray' 
+    'AR14N24B', 'MTPROTO_PROXY01', 'NormanV2ray'
 ] 
 CHANNEL_ID = "VPNine1" 
-V2RAY_CHUNK_SIZE = 30    
+V2RAY_CHUNK_SIZE = 15    
 MTPROTO_CHUNK_SIZE = 10  
 DELAY_BETWEEN_MSGS = 30  
 
@@ -55,7 +54,7 @@ def fetch_raw_configs():
     pattern_tg = r'(?:https?://t\.me/proxy\?[^\s"\'<>\n]+|tg://proxy\?[^\s"\'<>\n]+)'
     
     for channel in SOURCE_CHANNELS:
-        print(f"Searching in channel: @{channel}...")
+        print(f"Scraping @{channel}...")
         try:
             url = f"https://t.me/s/{channel}"
             headers = {'User-Agent': 'Mozilla/5.0'}
@@ -63,12 +62,23 @@ def fetch_raw_configs():
             if response.status_code == 200:
                 soup = BeautifulSoup(response.text, 'html.parser')
                 messages = soup.find_all('div', class_='tgme_widget_message_text')
+                
                 for msg in messages:
+                    # استراتژی اول: جستجو در متن خام
                     text = msg.get_text(separator=' ')
                     for c in re.findall(pattern_v2ray, text): v2ray_links.add(c)
                     for c in re.findall(pattern_tg, text): mtproto_links.add(c)
+                    
+                    # استراتژی دوم: جستجو در لینک‌های شیشه‌ای (href) مخفی شده
+                    for a_tag in msg.find_all('a'):
+                        href = a_tag.get('href')
+                        if href:
+                            if re.search(pattern_v2ray, href): v2ray_links.add(href)
+                            if re.search(pattern_tg, href): mtproto_links.add(href)
+                            
         except Exception as e:
             print(f"Error fetching from {channel}: {e}")
+            
     return list(v2ray_links), list(mtproto_links)
 
 def send_to_telegram(text):
@@ -92,10 +102,7 @@ def main():
     history = load_history()
     new_v2ray, new_mtproto = fetch_raw_configs()
     
-    print(f"Found {len(new_v2ray)} V2Ray and {len(new_mtproto)} MTProto links in total.")
-    
-    valid_v2ray = []
-    valid_mtproto = []
+    valid_v2ray, valid_mtproto = [], []
 
     for link in new_v2ray:
         base = link.split('#')[0] if not link.startswith('vmess') else link
@@ -108,21 +115,23 @@ def main():
             valid_mtproto.append(link)
             history.add(link)
 
-    print(f"New unique configs to send: {len(valid_v2ray)} V2Ray, {len(valid_mtproto)} MTProto")
-
     total_sent = 0
 
-    # ================= ارسال V2Ray =================
+    # ================= UI ارسال V2Ray =================
     for i in range(0, len(valid_v2ray), V2RAY_CHUNK_SIZE):
         chunk = valid_v2ray[i:i + V2RAY_CHUNK_SIZE]
-        msg = "<b>💎 Premium V2Ray Servers</b>\n<i>✅ Checked & High-Speed</i>\n\n"
-        msg += "<blockquote expandable>"
+        
+        msg = "<b>💎 Premium V2Ray Servers</b>\n"
+        msg += "<i>✅ Checked & High-Speed</i>\n\n"
+        
+        msg += "👇 <i>جهت کپی، روی کانفیگ ضربه بزنید:</i>\n"
+        msg += "<blockquote expandable>\n"
         for link in chunk:
             updated_link = update_remark(link, f"🚀@{CHANNEL_ID}")
             msg += f"<code>{html.escape(updated_link)}</code>\n\n"
         msg += "</blockquote>\n"
-        msg += "<i>💡 متن بالا را برای کپی لمس کنید.</i>\n\n"
-        msg += "🌐 #v2ray #vless #proxy #فیلترشکن\n"
+        
+        msg += "🌐 #v2ray #vless #vmess #proxy\n"
         msg += f"🛡 <b>Join:</b> @{CHANNEL_ID}"
         
         if send_to_telegram(msg):
@@ -130,13 +139,16 @@ def main():
             if i + V2RAY_CHUNK_SIZE < len(valid_v2ray) or valid_mtproto:
                 time.sleep(DELAY_BETWEEN_MSGS)
 
-    # ================= ارسال MTProto =================
+    # ================= UI ارسال پروکسی تلگرام =================
     for i in range(0, len(valid_mtproto), MTPROTO_CHUNK_SIZE):
         chunk = valid_mtproto[i:i + MTPROTO_CHUNK_SIZE]
-        msg = "<b>🛡 Premium MTProto Proxies</b>\n<i>⚡️ Anti-Filter Telegram</i>\n\n<blockquote>\n"
+        
+        msg = "<b>🛡 Premium MTProto Proxies</b>\n"
+        msg += "<i>⚡️ Anti-Filter Telegram</i>\n\n"
+        
         for idx, link in enumerate(chunk, 1):
-            msg += f"🔹 <a href='{html.escape(link)}'>Connect to Proxy {idx}</a>\n"
-        msg += "</blockquote>\n"
+            msg += f"🔹 <a href='{html.escape(link)}'>Connect to Proxy {idx}</a>\n\n"
+            
         msg += "🌐 #mtproto #پروکسی_تلگرام\n"
         msg += f"🛡 <b>Join:</b> @{CHANNEL_ID}"
         
