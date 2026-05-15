@@ -119,9 +119,7 @@ def main():
         
         msg = "<b>💎 Premium V2Ray Servers</b>\n"
         msg += "<i>✅ Checked & High-Speed</i>\n\n"
-        
-        msg += "👇 <i>جهت کپی کل لیست، روی کادر ضربه بزنید:</i>\n"
-        
+                
         # باز کردن کوت جمع شونده
         msg += "<blockquote expandable>"
         
@@ -139,10 +137,10 @@ def main():
         msg += "</code>\n"
         
         # بستن کوت جمع شونده
-        msg += "</blockquote>\n"
+        msg += "</blockquote>\n\n"
         
         msg += "🌐 #v2ray #vless #vpn #config #کانفیگ\n"
-        msg += f"🛡 <b>Join:</b> @{CHANNEL_ID}"
+        msg += f"🛡 <b>Join:</b> @{CHANNEL_ID}\n"
         
         send_to_telegram(msg)
         total_sent += len(chunk)
@@ -163,7 +161,7 @@ def main():
             msg += f"🔹 <a href='{escaped_link}'>Connect to Proxy {idx}</a>\n\n"
             
         msg += "🌐 #mtproto #proxy\n"
-        msg += f"🛡 <b>Join:</b> @{CHANNEL_ID}"
+        msg += f"🛡 <b>Join:</b> @{CHANNEL_ID}\n"
         
         send_to_telegram(msg)
         total_sent += len(chunk)
