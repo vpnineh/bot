@@ -5,13 +5,14 @@ import base64
 import requests
 import urllib.parse
 import time
+import html # اضافه شده برای حل مشکل ارور HTML تلگرام
 from bs4 import BeautifulSoup
 
 # ================= تنظیمات =================
 SOURCE_CHANNELS = ['AR14N24B', 'MTPROTO_PROXY01', 'NormanV2ray'] 
 CHANNEL_ID = "VPNine1" 
-V2RAY_CHUNK_SIZE = 30    # کاهش به ۱۵ عدد برای جلوگیری از ارور لیمیت کاراکتر تلگرام
-MTPROTO_CHUNK_SIZE = 10  
+V2RAY_CHUNK_SIZE = 15    # تعداد کانفیگ در هر پیام
+MTPROTO_CHUNK_SIZE = 15  
 DELAY_BETWEEN_MSGS = 30  
 
 BOT_TOKEN = os.environ.get('BOT_TOKEN')
@@ -29,36 +30,6 @@ def load_history():
 def save_history(history):
     with open(HISTORY_FILE, 'w', encoding='utf-8') as f:
         f.write('\n'.join(list(history)[-3000:]))
-
-def extract_host(config):
-    if config.startswith('vmess://'):
-        try:
-            b64_str = config[8:]
-            b64_str += "=" * ((4 - len(b64_str) % 4) % 4)
-            data = json.loads(base64.b64decode(b64_str).decode('utf-8'))
-            return data.get('add') or data.get('host')
-        except:
-            return None
-    elif 'proxy?server=' in config:
-        match = re.search(r'server=([^&]+)', config)
-        if match: return match.group(1)
-    else:
-        match = re.search(r'://(?:[^@/]+@)?([^:/?#]+)', config)
-        if match: return match.group(1)
-    return None
-
-def get_country_flag(host):
-    if not host: return "🌍"
-    try:
-        clean_host = host.split(':')[0]
-        resp = requests.get(f"http://ip-api.com/json/{clean_host}?fields=countryCode", timeout=5)
-        if resp.status_code == 200:
-            cc = resp.json().get('countryCode')
-            if cc:
-                return chr(ord(cc[0].upper()) + 127397) + chr(ord(cc[1].upper()) + 127397)
-    except:
-        pass
-    return "🌍"
 
 def update_remark(config, remark):
     if config.startswith('vmess://'):
@@ -105,7 +76,10 @@ def send_to_telegram(text):
         'parse_mode': 'HTML',
         'disable_web_page_preview': True
     }
-    requests.post(url, json=payload)
+    resp = requests.post(url, json=payload)
+    # چاپ ارورهای احتمالی تلگرام برای عیب‌یابی
+    if resp.status_code != 200:
+        print(f"Telegram API Error: {resp.text}")
 
 def main():
     if not BOT_TOKEN or not TARGET_CHANNEL:
@@ -137,12 +111,10 @@ def main():
         msg = "<b>New Proxies Available ⚡️</b>\n\n"
         
         for link in chunk:
-            host = extract_host(link)
-            flag = get_country_flag(host)
-            updated_link = update_remark(link, f"🚀@{CHANNEL_ID} - {flag}")
-            # استفاده از نقل‌قول جمع‌شونده به همراه تگ کپی
-            msg += f"<blockquote expandable><code>{updated_link}</code></blockquote>\n"
-            time.sleep(1.2) 
+            updated_link = update_remark(link, f"🚀@{CHANNEL_ID}")
+            # اسکیپ کردن کاراکترهای حساس برای جلوگیری از ارور تلگرام
+            escaped_link = html.escape(updated_link)
+            msg += f"<blockquote expandable><code>{escaped_link}</code></blockquote>\n"
             
         msg += f"\n🆔 @{CHANNEL_ID}"
         send_to_telegram(msg)
@@ -158,10 +130,8 @@ def main():
         msg = "<b>New MTProto Proxies 🛡</b>\n\n"
         
         for idx, link in enumerate(chunk, 1):
-            host = extract_host(link)
-            flag = get_country_flag(host)
-            msg += f"🔹 <a href='{link}'>Proxy {idx} - {flag}</a>\n"
-            time.sleep(1.2)
+            escaped_link = html.escape(link)
+            msg += f"🔹 <a href='{escaped_link}'>Proxy {idx}</a>\n"
             
         msg += f"\n🆔 @{CHANNEL_ID}"
         send_to_telegram(msg)
