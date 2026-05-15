@@ -108,21 +108,23 @@ def main():
     # ================= پردازش و ارسال V2Ray =================
     for i in range(0, len(valid_v2ray), V2RAY_CHUNK_SIZE):
         chunk = valid_v2ray[i:i + V2RAY_CHUNK_SIZE]
-        msg = "<b>New Configs Available ⚡️</b>\n\n"
         
-        # ۱. باز کردن یک کوت کلی برای تمام کانفیگ‌های این پیام
+        # هدر جدید، لوکس و اعتماد ساز
+        msg = "<b>💎 Premium V2Ray Servers</b>\n"
+        msg += "<i>✅ Checked & High-Speed</i>\n\n"
+        
         msg += "<blockquote expandable>\n"
-        
         for link in chunk:
             updated_link = update_remark(link, f"🚀@{CHANNEL_ID}")
             escaped_link = html.escape(updated_link)
-            # ۲. قرار دادن کانفیگ‌ها زیر هم داخل همون کوت
             msg += f"<code>{escaped_link}</code>\n\n"
-            
-        # ۳. بستن کوت
-        msg += "</blockquote>"
+        msg += "</blockquote>\n"
         
-        msg += f"\n🆔 @{CHANNEL_ID}"
+        # فوتر پیام با هشتگ‌های ترند و دعوت به اقدام (CTA) قدرتمند
+        msg += "<i>💡 برای اتصال، متن بالا را کپی کرده و در برنامه وارد کنید.</i>\n\n"
+        msg += "🌐 #v2ray #vless #vmess #proxy #فیلترشکن_رایگان #پروکسی\n"
+        msg += f"🛡 <b>Join Securely:</b> @{CHANNEL_ID}"
+        
         send_to_telegram(msg)
         total_sent += len(chunk)
         
@@ -131,16 +133,22 @@ def main():
             time.sleep(DELAY_BETWEEN_MSGS)
 
     # ================= پردازش و ارسال پروکسی تلگرام =================
-    # (همون‌طور که خواستی اینا به صورت لینک شیشه‌ای می‌مونن و تو کوت نمیرن)
     for i in range(0, len(valid_mtproto), MTPROTO_CHUNK_SIZE):
         chunk = valid_mtproto[i:i + MTPROTO_CHUNK_SIZE]
-        msg = "<b>New MTProto Proxies 🛡</b>\n\n"
         
+        msg = "<b>🛡 Premium MTProto Proxies</b>\n"
+        msg += "<i>⚡️ Anti-Filter Telegram</i>\n\n"
+        
+        # قرار دادن لینک‌های پروکسی داخل یک کوت ساده برای ظاهر تمیزتر
+        msg += "<blockquote>\n"
         for idx, link in enumerate(chunk, 1):
             escaped_link = html.escape(link)
-            msg += f"🔹 <a href='{escaped_link}'>Proxy {idx}</a>\n"
+            msg += f"🔹 <a href='{escaped_link}'>Connect to Proxy {idx}</a>\n"
+        msg += "</blockquote>\n"
             
-        msg += f"\n🆔 @{CHANNEL_ID}"
+        msg += "🌐 #mtproto #telegram_proxy #پروکسی_تلگرام\n"
+        msg += f"🛡 <b>Join Securely:</b> @{CHANNEL_ID}"
+        
         send_to_telegram(msg)
         total_sent += len(chunk)
         
