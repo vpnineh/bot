@@ -61,10 +61,12 @@ def fetch_raw_configs():
                 soup = BeautifulSoup(response.text, 'html.parser')
                 messages = soup.find_all('div', class_='tgme_widget_message_text')
                 for msg in messages:
+                    # ۱. استخراج پروکسی‌های عادی از متن
                     text = msg.get_text(separator=' ')
                     for c in re.findall(pattern_v2ray, text): v2ray_links.add(c)
                     for c in re.findall(pattern_tg, text): mtproto_links.add(c)
                     
+                    # ۲. استخراج پروکسی‌های مخفی در لینک‌های شیشه‌ای (href)
                     for a_tag in msg.find_all('a'):
                         href = a_tag.get('href')
                         if href:
@@ -117,21 +119,29 @@ def main():
         
         msg = "<b>💎 Premium V2Ray Servers</b>\n"
         msg += "<i>✅ Checked & High-Speed</i>\n\n"
-                
-        # تغییر کلیدی: استفاده از تگ pre داخل کوت برای کپی شدن کل بلوک با یک کلیک
-        msg += "<blockquote expandable><pre>"
         
+        msg += "👇 <i>جهت کپی کل لیست، روی کادر ضربه بزنید:</i>\n"
+        
+        # باز کردن کوت جمع شونده
+        msg += "<blockquote expandable>"
+        
+        # باز کردن یک تگ کدِ واحد برای کل لینک‌ها تا با هم کپی شوند
+        msg += "<code>"
         all_configs = ""
         for link in chunk:
             updated_link = update_remark(link, f"🚀@{CHANNEL_ID}")
             escaped_link = html.escape(updated_link)
+            # قرار دادن هر کانفیگ در یک خط جدید
             all_configs += f"{escaped_link}\n"
         
-        # پاک کردن فاصله اضافه خط آخر و بستن تگ‌ها
+        # پاک کردن فاصله خالی خط آخر و بستن تگ کد
         msg += all_configs.strip()
-        msg += "</pre></blockquote>\n"
+        msg += "</code>\n"
         
-        msg += "🌐 #v2ray #vless #vmess #proxy\n"
+        # بستن کوت جمع شونده
+        msg += "</blockquote>\n"
+        
+        msg += "🌐 #v2ray #vless #vpn #config #کانفیگ\n"
         msg += f"🛡 <b>Join:</b> @{CHANNEL_ID}"
         
         send_to_telegram(msg)
@@ -152,7 +162,7 @@ def main():
             escaped_link = html.escape(link)
             msg += f"🔹 <a href='{escaped_link}'>Connect to Proxy {idx}</a>\n\n"
             
-        msg += "🌐 #mtproto #پروکسی_تلگرام\n"
+        msg += "🌐 #mtproto #proxy\n"
         msg += f"🛡 <b>Join:</b> @{CHANNEL_ID}"
         
         send_to_telegram(msg)
