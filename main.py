@@ -13,7 +13,7 @@ SOURCE_CHANNELS = ['AR14N24B', 'MTPROTO_PROXY01', 'NormanV2ray']
 CHANNEL_ID = "VPNine1" 
 V2RAY_CHUNK_SIZE = 15    # حتماً روی ۱۵ بماند تا ارور لیمیت کاراکتر تلگرام ندهد
 MTPROTO_CHUNK_SIZE = 10  
-DELAY_BETWEEN_MSGS = 15  
+DELAY_BETWEEN_MSGS = 20  
 
 BOT_TOKEN = os.environ.get('BOT_TOKEN')
 TARGET_CHANNEL = os.environ.get('TARGET_CHANNEL')
