@@ -11,8 +11,8 @@ from bs4 import BeautifulSoup
 # ================= تنظیمات =================
 SOURCE_CHANNELS = ['AR14N24B', 'MTPROTO_PROXY01', 'NormanV2ray'] 
 CHANNEL_ID = "VPNine1" 
-V2RAY_CHUNK_SIZE = 15    # تعداد کانفیگ در هر پیام
-MTPROTO_CHUNK_SIZE = 15  
+V2RAY_CHUNK_SIZE = 30    # تعداد کانفیگ در هر پیام
+MTPROTO_CHUNK_SIZE = 10  
 DELAY_BETWEEN_MSGS = 30  
 
 BOT_TOKEN = os.environ.get('BOT_TOKEN')
