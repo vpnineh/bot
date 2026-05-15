@@ -117,8 +117,7 @@ def main():
     for i in range(0, len(valid_v2ray), V2RAY_CHUNK_SIZE):
         chunk = valid_v2ray[i:i + V2RAY_CHUNK_SIZE]
         
-        msg = "<b>💎 Premium V2Ray Servers</b>\n"
-        msg += "<i>✅ Checked & High-Speed</i>\n\n"
+        msg = "<b>💎 V2Ray Servers | ✅ Checked</b>\n\n"
                 
         # باز کردن کوت جمع شونده
         msg += "<blockquote expandable>"
@@ -154,7 +153,6 @@ def main():
         chunk = valid_mtproto[i:i + MTPROTO_CHUNK_SIZE]
         
         msg = "<b>🛡 Premium MTProto Proxies</b>\n"
-        msg += "<i>⚡️ Anti-Filter Telegram</i>\n\n"
         
         for idx, link in enumerate(chunk, 1):
             escaped_link = html.escape(link)
