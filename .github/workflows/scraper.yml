@@ -1,39 +1,31 @@
-name: Proxy Auto Forwarder
+name: Telegram Pro Prompt Engine
 
 on:
   schedule:
     - cron: '0 * * * *'
   workflow_dispatch:
-  
+
 jobs:
-  run-scraper:
+  generate-and-post:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
 
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v3
+      - name: 📥 Checkout Repository
+        uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v4
+      - name: 🐍 Setup Python 3.10
+        uses: actions/setup-python@v5
         with:
           python-version: '3.10'
+          # خط کش از اینجا حذف شد تا ارور برطرف شود
 
-      - name: Install Dependencies
+      - name: 📦 Install Dependencies
         run: |
-          pip install -r requirements.txt
+          python -m pip install --upgrade pip
+          pip install requests
 
-      - name: Run Script
+      - name: 🚀 Run Combinatorial Prompt Engine
         env:
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
           TARGET_CHANNEL: ${{ secrets.TARGET_CHANNEL }}
         run: python main.py
-
-      - name: Commit History
-        run: |
-          git config --local user.email "action@github.com"
-          git config --local user.name "GitHub Action"
-          git add history.txt
-          git commit -m "Auto-update history [skip ci]" || echo "No new configs, nothing to commit"
-          git push
