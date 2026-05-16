@@ -157,7 +157,7 @@ def main():
             escaped_link = html.escape(link)
             msg += f"🔹 <a href='{escaped_link}'>Connect to Proxy {idx}</a>\n"
             
-        msg += f"🛡 <b>Join:</b> @{CHANNEL_ID}\n"
+        msg += f"\n\n🛡 <b>Join:</b> @{CHANNEL_ID}\n"
         msg += "🌐 #mtproto #proxy\n"
 
         send_to_telegram(msg)
