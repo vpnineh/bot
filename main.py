@@ -136,7 +136,7 @@ def main():
         
         # بستن کوت جمع شونده
         msg += "</blockquote>\n\n"
-        msg += "<b>💎 V2Ray Servers | ✅ Checked</b>\n\n"
+        msg += "<b>💎 V2Ray Servers</b>\n\n"
         msg += f"🛡 <b>Join:</b> @{CHANNEL_ID}\n"
         msg += "🌐 #v2ray #vless #vpn #config #کانفیگ\n"
         
