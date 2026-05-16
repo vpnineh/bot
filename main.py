@@ -117,7 +117,6 @@ def main():
     for i in range(0, len(valid_v2ray), V2RAY_CHUNK_SIZE):
         chunk = valid_v2ray[i:i + V2RAY_CHUNK_SIZE]
         
-        msg = "<b>💎 V2Ray Servers | ✅ Checked</b>\n\n"
                 
         # باز کردن کوت جمع شونده
         msg += "<blockquote expandable>"
@@ -137,7 +136,7 @@ def main():
         
         # بستن کوت جمع شونده
         msg += "</blockquote>\n\n"
-        
+        msg = "<b>💎 V2Ray Servers | ✅ Checked</b>\n\n"
         msg += f"🛡 <b>Join:</b> @{CHANNEL_ID}\n"
         msg += "🌐 #v2ray #vless #vpn #config #کانفیگ\n"
         
@@ -156,7 +155,7 @@ def main():
         
         for idx, link in enumerate(chunk, 1):
             escaped_link = html.escape(link)
-            msg += f"🔹 <a href='{escaped_link}'>Connect to Proxy {idx}</a>\n\n"
+            msg += f"🔹 <a href='{escaped_link}'>Connect to Proxy {idx}</a>\n"
             
         msg += f"🛡 <b>Join:</b> @{CHANNEL_ID}\n"
         msg += "🌐 #mtproto #proxy\n"
