@@ -3,7 +3,7 @@ name: Proxy Auto Forwarder
 on:
   schedule:
     # تغییر به دقیقه‌های غیر رند تا سیستم گیت‌هاب مجبور به ثبت مجدد شود
-    - cron: '14,43 * * * *'
+    - cron: '37 * * * *'
   workflow_dispatch:
   
 jobs:
