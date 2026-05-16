@@ -152,7 +152,7 @@ def main():
     for i in range(0, len(valid_mtproto), MTPROTO_CHUNK_SIZE):
         chunk = valid_mtproto[i:i + MTPROTO_CHUNK_SIZE]
         
-        msg = "<b>🛡 Premium MTProto Proxies</b>\n"
+        msg = "<b>🛡 Premium MTProto Proxies</b>\n\n"
         
         for idx, link in enumerate(chunk, 1):
             escaped_link = html.escape(link)
