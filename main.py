@@ -119,7 +119,7 @@ def main():
         
                 
         # باز کردن کوت جمع شونده
-        msg += "<blockquote expandable>"
+        msg = "<blockquote expandable>"
         
         # باز کردن یک تگ کدِ واحد برای کل لینک‌ها تا با هم کپی شوند
         msg += "<code>"
@@ -136,7 +136,7 @@ def main():
         
         # بستن کوت جمع شونده
         msg += "</blockquote>\n\n"
-        msg = "<b>💎 V2Ray Servers | ✅ Checked</b>\n\n"
+        msg += "<b>💎 V2Ray Servers | ✅ Checked</b>\n\n"
         msg += f"🛡 <b>Join:</b> @{CHANNEL_ID}\n"
         msg += "🌐 #v2ray #vless #vpn #config #کانفیگ\n"
         
