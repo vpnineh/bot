@@ -13,7 +13,7 @@ SOURCE_CHANNELS = ['AR14N24B', 'persianvpnhub', 'oneclickvpnkeys']
 CHANNEL_ID = "VPNine1" 
 V2RAY_CHUNK_SIZE = 15    # حتماً روی ۱۵ بماند تا ارور لیمیت کاراکتر تلگرام ندهد
 MTPROTO_CHUNK_SIZE = 10  
-DELAY_BETWEEN_MSGS = 20  
+DELAY_BETWEEN_MSGS = 10
 
 BOT_TOKEN = os.environ.get('BOT_TOKEN')
 TARGET_CHANNEL = os.environ.get('TARGET_CHANNEL')
