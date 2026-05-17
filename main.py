@@ -9,7 +9,7 @@ import html
 from bs4 import BeautifulSoup
 
 # ================= تنظیمات =================
-SOURCE_CHANNELS = ['AR14N24B', 'persianvpnhub', 'oneclickvpnkeys'] 
+SOURCE_CHANNELS = ['AR14N24B', 'oneclickvpnkeys'] 
 CHANNEL_ID = "VPNine1" 
 V2RAY_CHUNK_SIZE = 15    # حتماً روی ۱۵ بماند تا ارور لیمیت کاراکتر تلگرام ندهد
 MTPROTO_CHUNK_SIZE = 10  
