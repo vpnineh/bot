@@ -16,6 +16,9 @@ CHANNEL_ID = "VPNine1"
 V2RAY_CHUNK_SIZE = 15    # حتماً روی ۱۵ بماند تا ارور لیمیت کاراکتر تلگرام ندهد
 MTPROTO_CHUNK_SIZE = 10  
 DELAY_BETWEEN_MSGS = 10
+
+# تنظیمات مربوط به فیلتر پینگ (ایران)
+ENABLE_PING_FILTER = True # True = فقط بدون پینگ‌ها | False = ارسال همه کانفیگ‌ها بدون تست
 PING_TIMEOUT = 2.0       # حداکثر زمان انتظار برای پینگ (ثانیه)
 
 BOT_TOKEN = os.environ.get('BOT_TOKEN')
@@ -93,13 +96,13 @@ def check_ping(config):
         return False # پینگ نداد (تایم‌اوت یا مسدود شده)
 
 def filter_no_ping_configs(configs):
-    """نگه داشتن کانفیگ‌هایی که پینگ *نمی‌دهند* (مخصوص شرایط خاص شبکه)"""
+    """نگه داشتن کانفیگ‌هایی که پینگ *نمی‌دهند*"""
     selected = []
     print(f"Checking {len(configs)} configs for NO-PING rule...")
     with concurrent.futures.ThreadPoolExecutor(max_workers=20) as executor:
         results = executor.map(lambda c: (c, check_ping(c)), configs)
         for config, has_ping in results:
-            if not has_ping: # تغییر اصلی: فقط اگر پینگ نداد انتخاب می‌شود
+            if not has_ping: # فقط اگر پینگ نداد انتخاب می‌شود
                 selected.append(config)
     return selected
 
@@ -165,9 +168,15 @@ def main():
             unique_mtproto.append(link)
             history.add(link)
 
-    # اجرای فیلتر برای پیدا کردن کانفیگ‌های بدون پینگ
-    valid_v2ray = filter_no_ping_configs(unique_v2ray)
-    valid_mtproto = filter_no_ping_configs(unique_mtproto)
+    # اجرای شرط فیلتر پینگ
+    if ENABLE_PING_FILTER:
+        print("Ping filter is ON. Filtering configs...")
+        valid_v2ray = filter_no_ping_configs(unique_v2ray)
+        valid_mtproto = filter_no_ping_configs(unique_mtproto)
+    else:
+        print("Ping filter is OFF. Processing all new configs...")
+        valid_v2ray = unique_v2ray
+        valid_mtproto = unique_mtproto
 
     total_sent = 0
 
@@ -186,7 +195,13 @@ def main():
         msg += all_configs.strip()
         msg += "</code>\n"
         msg += "</blockquote>\n\n"
-        msg += "<b>💎 V2Ray Servers (Filtered & Optimized)</b>\n\n"
+        
+        # تغییر متن پیام بر اساس وضعیت فیلتر
+        if ENABLE_PING_FILTER:
+            msg += "<b>💎 V2Ray Servers (Filtered/No-Ping)</b>\n\n"
+        else:
+            msg += "<b>💎 V2Ray Servers (New Updates)</b>\n\n"
+            
         msg += f"🛡 <b>Join:</b> @{CHANNEL_ID}\n"
         msg += "🌐 #v2ray #vless #vpn #config #کانفیگ\n"
         
@@ -201,7 +216,10 @@ def main():
     for i in range(0, len(valid_mtproto), MTPROTO_CHUNK_SIZE):
         chunk = valid_mtproto[i:i + MTPROTO_CHUNK_SIZE]
         
-        msg = "<b>🛡 Premium MTProto Proxies (Filtered)</b>\n\n"
+        if ENABLE_PING_FILTER:
+            msg = "<b>🛡 Premium MTProto Proxies (Filtered)</b>\n\n"
+        else:
+            msg = "<b>🛡 Premium MTProto Proxies (New Updates)</b>\n\n"
         
         for idx, link in enumerate(chunk, 1):
             escaped_link = html.escape(link)
@@ -218,7 +236,7 @@ def main():
             time.sleep(DELAY_BETWEEN_MSGS)
 
     save_history(history)
-    print(f"Process finished. Successfully sent {total_sent} filtered configs.")
+    print(f"Process finished. Successfully sent {total_sent} configs.")
 
 if __name__ == '__main__':
     main()
