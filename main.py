@@ -6,14 +6,17 @@ import requests
 import urllib.parse
 import time
 import html
+import socket
+import concurrent.futures
 from bs4 import BeautifulSoup
 
 # ================= تنظیمات =================
-SOURCE_CHANNELS = ['AR14N24B', 'oneclickvpnkeys'] 
+SOURCE_CHANNELS = ['AR14N24B', 'oneclickvpnkeys', 'persianvpnhub'] 
 CHANNEL_ID = "VPNine1" 
 V2RAY_CHUNK_SIZE = 15    # حتماً روی ۱۵ بماند تا ارور لیمیت کاراکتر تلگرام ندهد
 MTPROTO_CHUNK_SIZE = 10  
 DELAY_BETWEEN_MSGS = 10
+PING_TIMEOUT = 2.0       # حداکثر زمان انتظار برای پینگ (ثانیه)
 
 BOT_TOKEN = os.environ.get('BOT_TOKEN')
 TARGET_CHANNEL = os.environ.get('TARGET_CHANNEL')
@@ -47,6 +50,59 @@ def update_remark(config, remark):
         if '#' in config: config = config.split('#')[0]
         return f"{config.rstrip(')')}#{remark}"
 
+def extract_ip_port(config):
+    """استخراج IP و Port از انواع لینک‌ها برای گرفتن پینگ"""
+    try:
+        if config.startswith('vmess://'):
+            b64_str = config[8:]
+            b64_str += "=" * ((4 - len(b64_str) % 4) % 4)
+            data = json.loads(base64.b64decode(b64_str).decode('utf-8'))
+            return data.get('add'), int(data.get('port'))
+        
+        elif config.startswith(('vless://', 'trojan://', 'ss://', 'ssr://', 'tuic://', 'hysteria2://')):
+            parsed = urllib.parse.urlparse(config)
+            netloc = parsed.netloc
+            if '@' in netloc:
+                netloc = netloc.split('@')[1]
+            if ':' in netloc:
+                host, port = netloc.split(':')
+                return host, int(port)
+                
+        elif config.startswith(('http', 'tg')): # MTProto
+            parsed = urllib.parse.urlparse(config)
+            qs = urllib.parse.parse_qs(parsed.query)
+            if 'server' in qs and 'port' in qs:
+                return qs['server'][0], int(qs['port'][0])
+    except Exception:
+        pass
+    return None, None
+
+def check_ping(config):
+    """تست اتصال (TCP Ping) به سرور"""
+    host, port = extract_ip_port(config)
+    if not host or not port:
+        return False # اگر نتوانست استخراج کند، فرض می‌کنیم پینگ ندارد
+        
+    try:
+        socket.setdefaulttimeout(PING_TIMEOUT)
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.connect((host, int(port)))
+        s.close()
+        return True # پینگ داد
+    except Exception:
+        return False # پینگ نداد (تایم‌اوت یا مسدود شده)
+
+def filter_no_ping_configs(configs):
+    """نگه داشتن کانفیگ‌هایی که پینگ *نمی‌دهند* (مخصوص شرایط خاص شبکه)"""
+    selected = []
+    print(f"Checking {len(configs)} configs for NO-PING rule...")
+    with concurrent.futures.ThreadPoolExecutor(max_workers=20) as executor:
+        results = executor.map(lambda c: (c, check_ping(c)), configs)
+        for config, has_ping in results:
+            if not has_ping: # تغییر اصلی: فقط اگر پینگ نداد انتخاب می‌شود
+                selected.append(config)
+    return selected
+
 def fetch_raw_configs():
     v2ray_links, mtproto_links = set(), set()
     pattern_v2ray = r'(?:vless|vmess|trojan|ss|ssr|tuic|hysteria2?)://[^\s"\'<>\n]+'
@@ -61,12 +117,10 @@ def fetch_raw_configs():
                 soup = BeautifulSoup(response.text, 'html.parser')
                 messages = soup.find_all('div', class_='tgme_widget_message_text')
                 for msg in messages:
-                    # ۱. استخراج پروکسی‌های عادی از متن
                     text = msg.get_text(separator=' ')
                     for c in re.findall(pattern_v2ray, text): v2ray_links.add(c)
                     for c in re.findall(pattern_tg, text): mtproto_links.add(c)
                     
-                    # ۲. استخراج پروکسی‌های مخفی در لینک‌های شیشه‌ای (href)
                     for a_tag in msg.find_all('a'):
                         href = a_tag.get('href')
                         if href:
@@ -97,19 +151,23 @@ def main():
     history = load_history()
     new_v2ray, new_mtproto = fetch_raw_configs()
     
-    valid_v2ray = []
-    valid_mtproto = []
+    unique_v2ray = []
+    unique_mtproto = []
 
     for link in new_v2ray:
         base = link.split('#')[0] if not link.startswith('vmess') else link
         if base not in history:
-            valid_v2ray.append(link)
+            unique_v2ray.append(link)
             history.add(base)
             
     for link in new_mtproto:
         if link not in history:
-            valid_mtproto.append(link)
+            unique_mtproto.append(link)
             history.add(link)
+
+    # اجرای فیلتر برای پیدا کردن کانفیگ‌های بدون پینگ
+    valid_v2ray = filter_no_ping_configs(unique_v2ray)
+    valid_mtproto = filter_no_ping_configs(unique_mtproto)
 
     total_sent = 0
 
@@ -117,26 +175,18 @@ def main():
     for i in range(0, len(valid_v2ray), V2RAY_CHUNK_SIZE):
         chunk = valid_v2ray[i:i + V2RAY_CHUNK_SIZE]
         
-                
-        # باز کردن کوت جمع شونده
         msg = "<blockquote expandable>"
-        
-        # باز کردن یک تگ کدِ واحد برای کل لینک‌ها تا با هم کپی شوند
         msg += "<code>"
         all_configs = ""
         for link in chunk:
             updated_link = update_remark(link, f"🚀@{CHANNEL_ID}")
             escaped_link = html.escape(updated_link)
-            # قرار دادن هر کانفیگ در یک خط جدید
             all_configs += f"{escaped_link}\n"
         
-        # پاک کردن فاصله خالی خط آخر و بستن تگ کد
         msg += all_configs.strip()
         msg += "</code>\n"
-        
-        # بستن کوت جمع شونده
         msg += "</blockquote>\n\n"
-        msg += "<b>💎 V2Ray Servers</b>\n\n"
+        msg += "<b>💎 V2Ray Servers (Filtered & Optimized)</b>\n\n"
         msg += f"🛡 <b>Join:</b> @{CHANNEL_ID}\n"
         msg += "🌐 #v2ray #vless #vpn #config #کانفیگ\n"
         
@@ -151,7 +201,7 @@ def main():
     for i in range(0, len(valid_mtproto), MTPROTO_CHUNK_SIZE):
         chunk = valid_mtproto[i:i + MTPROTO_CHUNK_SIZE]
         
-        msg = "<b>🛡 Premium MTProto Proxies</b>\n\n"
+        msg = "<b>🛡 Premium MTProto Proxies (Filtered)</b>\n\n"
         
         for idx, link in enumerate(chunk, 1):
             escaped_link = html.escape(link)
@@ -168,7 +218,7 @@ def main():
             time.sleep(DELAY_BETWEEN_MSGS)
 
     save_history(history)
-    print(f"Process finished. Successfully sent {total_sent} new configs.")
+    print(f"Process finished. Successfully sent {total_sent} filtered configs.")
 
 if __name__ == '__main__':
     main()
