@@ -11,7 +11,7 @@ import concurrent.futures
 from bs4 import BeautifulSoup
 
 # ================= تنظیمات =================
-SOURCE_CHANNELS = ['AR14N24B', 'oneclickvpnkeys', 'persianvpnhub', 'filembad, 'moftconfig']
+SOURCE_CHANNELS = ['AR14N24B', 'oneclickvpnkeys', 'persianvpnhub', 'filembad', 'moftconfig']
 CHANNEL_ID = "VPNine1" 
 CHANNEL_ID = "VPNine1" 
 V2RAY_CHUNK_SIZE = 15    # حتماً روی ۱۵ بماند تا ارور لیمیت کاراکتر تلگرام ندهد
