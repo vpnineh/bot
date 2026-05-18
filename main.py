@@ -12,7 +12,7 @@ from bs4 import BeautifulSoup
 
 # ================= تنظیمات =================
 CHANNEL_ID = "VPNine1" 
-V2RAY_CHUNK_SIZE = 15    # حتماً روی ۱۵ بماند تا ارور لیمیت کاراکتر تلگرام ندهد
+V2RAY_CHUNK_SIZE = 10    # حتماً روی ۱۵ بماند تا ارور لیمیت کاراکتر تلگرام ندهد
 MTPROTO_CHUNK_SIZE = 10  
 DELAY_BETWEEN_MSGS = 10
 
