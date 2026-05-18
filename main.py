@@ -11,8 +11,6 @@ import concurrent.futures
 from bs4 import BeautifulSoup
 
 # ================= تنظیمات =================
-SOURCE_CHANNELS = ['AR14N24B', 'oneclickvpnkeys', 'persianvpnhub', 'filembad', 'moftconfig', 'v2ray_configs_pool']
-CHANNEL_ID = "VPNine1" 
 CHANNEL_ID = "VPNine1" 
 V2RAY_CHUNK_SIZE = 15    # حتماً روی ۱۵ بماند تا ارور لیمیت کاراکتر تلگرام ندهد
 MTPROTO_CHUNK_SIZE = 10  
@@ -27,6 +25,7 @@ TARGET_CHANNEL = os.environ.get('TARGET_CHANNEL')
 # ===========================================
 
 HISTORY_FILE = 'history.txt'
+SOURCES_FILE = 'sources.txt'
 
 def load_history():
     if os.path.exists(HISTORY_FILE):
@@ -37,6 +36,44 @@ def load_history():
 def save_history(history):
     with open(HISTORY_FILE, 'w', encoding='utf-8') as f:
         f.write('\n'.join(list(history)[-3000:]))
+
+def load_sources():
+    """خواندن منابع از فایل متنی و تفکیک کانال‌ها و لینک‌های ساب"""
+    channels = []
+    subs = []
+    
+    # اگر فایل وجود نداشت، یکی با مقادیر پیش‌فرض می‌سازیم
+    if not os.path.exists(SOURCES_FILE):
+        with open(SOURCES_FILE, 'w', encoding='utf-8') as f:
+            f.write("# لینک‌های ساب و آیدی کانال‌ها را اینجا قرار دهید\n")
+            f.write("AR14N24B\n")
+            f.write("oneclickvpnkeys\n")
+            f.write("persianvpnhub\n")
+            f.write("filembad\n")
+            f.write("moftconfig\n")
+            f.write("v2ray_configs_pool\n")
+            f.write("# https://example.com/sub_linkn")
+    
+    with open(SOURCES_FILE, 'r', encoding='utf-8') as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith('#'):
+                continue
+            
+            # تشخیص لینک ساب از کانال تلگرام
+            if line.startswith('http://') or line.startswith('https://'):
+                if 't.me/' in line:
+                    # استخراج آیدی کانال از لینک تلگرام
+                    ch = line.split('t.me/')[-1].split('/')[0].replace('s', '').replace('+', '')
+                    if ch: channels.append(ch)
+                else:
+                    subs.append(line)
+            elif line.startswith('@'):
+                channels.append(line[1:])
+            else:
+                channels.append(line)
+                
+    return channels, subs
 
 def update_remark(config, remark):
     if config.startswith('vmess://'):
@@ -107,15 +144,31 @@ def filter_no_ping_configs(configs):
                 selected.append(config)
     return selected
 
+def decode_sub_text(text):
+    """تلاش برای دیکد کردن محتوای لینک ساب (چون معمولا Base64 است)"""
+    try:
+        # حذف فاصله‌ها برای دیکد صحیح
+        clean_text = text.strip().replace('\n', '').replace('\r', '')
+        clean_text += "=" * ((4 - len(clean_text) % 4) % 4)
+        decoded = base64.b64decode(clean_text).decode('utf-8')
+        return decoded
+    except Exception:
+        return text # اگر Base64 نبود، همان متن اصلی را برمی‌گرداند
+
 def fetch_raw_configs():
+    channels, subs = load_sources()
+    print(f"Loaded {len(channels)} channels and {len(subs)} sub links.")
+    
     v2ray_links, mtproto_links = set(), set()
     pattern_v2ray = r'(?:vless|vmess|trojan|ss|ssr|tuic|hysteria2?)://[^\s"\'<>\n]+'
     pattern_tg = r'(?:https?://t\.me/proxy\?[^\s"\'<>\n]+|tg://proxy\?[^\s"\'<>\n]+)'
     
-    for channel in SOURCE_CHANNELS:
+    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
+
+    # 1. پردازش کانال‌های تلگرام
+    for channel in channels:
         try:
             url = f"https://t.me/s/{channel}"
-            headers = {'User-Agent': 'Mozilla/5.0'}
             response = requests.get(url, headers=headers, timeout=15)
             if response.status_code == 200:
                 soup = BeautifulSoup(response.text, 'html.parser')
@@ -131,7 +184,21 @@ def fetch_raw_configs():
                             for c in re.findall(pattern_v2ray, href): v2ray_links.add(c)
                             for c in re.findall(pattern_tg, href): mtproto_links.add(c)
         except Exception as e:
-            print(f"Error fetching from {channel}: {e}")
+            print(f"Error fetching channel {channel}: {e}")
+
+    # 2. پردازش لینک‌های ساب
+    for sub in subs:
+        try:
+            response = requests.get(sub, headers=headers, timeout=15)
+            if response.status_code == 200:
+                raw_text = response.text
+                decoded_text = decode_sub_text(raw_text)
+                
+                # استخراج کانفیگ‌ها از متن دیکد شده یا خام
+                for c in re.findall(pattern_v2ray, decoded_text): v2ray_links.add(c)
+                for c in re.findall(pattern_tg, decoded_text): mtproto_links.add(c)
+        except Exception as e:
+            print(f"Error fetching sub link {sub}: {e}")
             
     return list(v2ray_links), list(mtproto_links)
 
@@ -186,7 +253,7 @@ def main():
         chunk = valid_v2ray[i:i + V2RAY_CHUNK_SIZE]
         
         msg = "<blockquote expandable>"
-        msg += "<code>"
+        msg += "<code>\n"
         all_configs = ""
         for link in chunk:
             updated_link = update_remark(link, f"🚀@{CHANNEL_ID}")
@@ -194,7 +261,7 @@ def main():
             all_configs += f"{escaped_link}\n"
         
         msg += all_configs.strip()
-        msg += "</code>\n"
+        msg += "\n</code>\n"
         msg += "</blockquote>\n\n"
         
         # تغییر متن پیام بر اساس وضعیت فیلتر
