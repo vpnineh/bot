@@ -1,12 +1,12 @@
 name: Proxy Auto Forwarder
 
 on:
-  # Allows you to run this workflow manually from the Actions tab
+  # Allows you to run this workflow manually from the Actions tabs
   workflow_dispatch:
   # Runs the workflow automatically every hour
-  schedule:
-    - cron: '*/15 * * * *'
-
+schedule:
+    - cron: '7,22,37,52 * * * *'
+    
 jobs:
   run-scraper:
     runs-on: ubuntu-latest
