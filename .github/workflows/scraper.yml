@@ -1,10 +1,10 @@
 name: Proxy Auto Forwarder
 
 on:
-  # Allows you to run this workflow manually from the Actions tabs
+  # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
   # Runs the workflow automatically every hour
-schedule:
+  schedule:
     - cron: '7,22,37,52 * * * *'
     
 jobs:
@@ -36,6 +36,6 @@ jobs:
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
-          git add history.txt
-          git commit -m "Auto-update history [skip ci]" || echo "No new configs, nothing to commit"
+          git add history.txt sub/ 
+          git commit -m "Auto-update history and sub [skip ci]" || echo "No new configs, nothing to commit"
           git push
