@@ -7,11 +7,6 @@ on:
   schedule:
     - cron: '0 * * * *'
 
-# Concurrency ensures that only one instance of this workflow runs at a time.
-concurrency:
-  group: ${{ github.workflow }}
-  cancel-in-progress: false
-
 jobs:
   run-scraper:
     runs-on: ubuntu-latest
