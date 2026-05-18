@@ -199,7 +199,7 @@ def main():
         
         # تغییر متن پیام بر اساس وضعیت فیلتر
         if ENABLE_PING_FILTER:
-            msg += "<b>💎 V2Ray Servers (Filtered/No-Ping)</b>\n\n"
+            msg += "<b>💎 V2Ray Servers (بهینه شده برای نت ملی)</b>\n\n"
         else:
             msg += "<b>💎 V2Ray Servers (New Updates)</b>\n\n"
             
@@ -218,7 +218,7 @@ def main():
         chunk = valid_mtproto[i:i + MTPROTO_CHUNK_SIZE]
         
         if ENABLE_PING_FILTER:
-            msg = "<b>🛡 Premium MTProto Proxies (Filtered)</b>\n\n"
+            msg = "<b>🛡 Premium MTProto Proxies (نت ملی)</b>\n\n"
         else:
             msg = "<b>🛡 Premium MTProto Proxies (New Updates)</b>\n\n"
         
