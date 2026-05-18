@@ -199,7 +199,7 @@ def main():
         
         # تغییر متن پیام بر اساس وضعیت فیلتر
         if ENABLE_PING_FILTER:
-            msg += "<b>💎 V2Ray Servers (بهینه شده برای نت ملی)</b>\n\n"
+            msg += "<b>💎 بهینه شده برای نت ملی</b>\n\n"
         else:
             msg += "<b>💎 V2Ray Servers (New Updates)</b>\n\n"
             
