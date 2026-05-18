@@ -1,10 +1,17 @@
 name: Proxy Auto Forwarder
 
 on:
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+  # Runs the workflow automatically every hour
   schedule:
     - cron: '*/45 * * * *'
-  workflow_dispatch:
-  
+
+# Concurrency ensures that only one instance of this workflow runs at a time.
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
 jobs:
   run-scraper:
     runs-on: ubuntu-latest
