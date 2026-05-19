@@ -1,7 +1,6 @@
 AR14N24B
 oneclickvpnkeys
 persianvpnhub
-filembad
 moftconfig
 v2ray_configs_pool
 https://raw.githubusercontent.com/therealaleph/Iran-configs/refs/heads/main/ir_configs.txt
