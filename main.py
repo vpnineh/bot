@@ -156,7 +156,6 @@ def get_country_info(ip_or_host):
             response = reader.country(ip)
             iso = response.country.iso_code
             if iso:
-                # تبدیل کد ISO به ایموجی پرچم (بدون فاصله اضافی برای شکیل ماندن لینک)
                 flag = chr(ord(iso[0]) + 127397) + chr(ord(iso[1]) + 127397)
                 return f"{flag}{iso}-"
     except Exception:
@@ -416,7 +415,6 @@ def main():
     raw_pro_v2ray = []
     standard_v2ray = []
     
-    # اعمال شرط برای جدا کردن کانفیگ‌های پرو در صورت روشن بودن تاگل
     for config in unique_v2ray:
         if ENABLE_INTERNET_PRO and is_internet_pro_config(config):
             raw_pro_v2ray.append(config)
@@ -436,9 +434,11 @@ def main():
 
     total_sent = 0
     
+    # ================= اصلاح منطق هش آی‌پی شیر و خورشید برای جلوگیری از تکرار =================
     if ENABLE_SH_X_IP and sh_x_ips_dict:
         for channel_name, ips in sh_x_ips_dict.items():
-            ip_hash = f"SH_X_{channel_name}_" + "_".join(sorted(ips))
+            # نام کانال حذف شد تا کلید بر اساس خود آی‌پی‌ها ساخته شود
+            ip_hash = "SH_X_" + "_".join(sorted(ips))
             if ip_hash not in history:
                 msg = "آی پی برنامه 🦁☀️\n\n"
                 msg += "<blockquote expandable><code>\n"
@@ -451,8 +451,10 @@ def main():
                 history.add(ip_hash)
                 print(f"Sent {len(ips)} Sh_X IPs from channel: {channel_name}")
                 time.sleep(DELAY_BETWEEN_MSGS)
+            else:
+                print(f"Skipped duplicate Sh_X IPs from channel: {channel_name}")
 
-    # ================= ارسال کانفیگ‌های اینترنت پرو (در صورت روشن بودن تاگل) =================
+    # ================= ارسال کانفیگ‌های اینترنت پرو =================
     if ENABLE_INTERNET_PRO:
         for i in range(0, len(valid_pro_v2ray), V2RAY_CHUNK_SIZE):
             chunk = valid_pro_v2ray[i:i + V2RAY_CHUNK_SIZE]
