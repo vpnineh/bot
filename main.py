@@ -177,19 +177,18 @@ def decode_sub_text(text):
 
 def fetch_raw_configs():
     channels, subs = load_sources()
-    sh_x_channels = load_sh_x_channels() # بارگذاری کانال‌های مخصوص ش.خ از x.txt
+    sh_x_channels = load_sh_x_channels()
     
     print(f"Loaded {len(channels)} general channels, {len(sh_x_channels)} sh_x channels, and {len(subs)} sub links.")
     
     v2ray_links, mtproto_links = set(), set()
     pattern_v2ray = r'(?:vless|vmess|trojan|ss|ssr|tuic|hysteria2?)://[^\s"\'<>\n]+'
     pattern_tg = r'(?:https?://t\.me/proxy\?[^\s"\'<>\n]+|tg://proxy\?[^\s"\'<>\n]+)'
-    pattern_ip = r'\b(?:\d{1,3}\.){3}\d{1,3}\b' # پترن برای شناسایی IPv4
+    pattern_ip = r'\b(?:\d{1,3}\.){3}\d{1,3}\b'
     
-    all_sh_x_posts = []
+    sh_x_posts_by_channel = {} # ذخیره تفکیک‌شده پست‌های هر کانال ش.خ
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
 
-    # ادغام تمام کانال‌ها برای بررسی کلی کانفیگ‌ها در یک لوپ
     union_channels = list(set(channels + sh_x_channels))
 
     # 1. پردازش کانال‌های تلگرام
@@ -234,7 +233,10 @@ def fetch_raw_configs():
                                 # استخراج زمان پست برای پیدا کردن جدیدترین
                                 time_tag = widget.find('time')
                                 dt_str = time_tag.get('datetime', '') if time_tag else ''
-                                all_sh_x_posts.append((dt_str, ips))
+                                
+                                if channel not in sh_x_posts_by_channel:
+                                    sh_x_posts_by_channel[channel] = []
+                                sh_x_posts_by_channel[channel].append((dt_str, ips))
                             
         except Exception as e:
             print(f"Error fetching channel {channel}: {e}")
@@ -252,14 +254,14 @@ def fetch_raw_configs():
         except Exception as e:
             print(f"Error fetching sub link {sub}: {e}")
             
-    # پیدا کردن جدیدترین آی‌پی‌های ش.خ از بین تمام پست‌های فیلتر شده از فایل x.txt
-    newest_sh_x_ips = []
-    if all_sh_x_posts:
-        # سورت کردن بر اساس تاریخ (نزولی به صعودی)؛ آخرین آیتم جدیدترین پست خواهد بود
-        all_sh_x_posts.sort(key=lambda x: x[0])
-        newest_sh_x_ips = all_sh_x_posts[-1][1]
+    # پیدا کردن جدیدترین آی‌پی‌های ش.خ به تفکیک «هر کانال» به صورت جداگانه
+    newest_sh_x_by_channel = {}
+    for ch, posts in sh_x_posts_by_channel.items():
+        # سورت کردن پست‌های همان کانال بر اساس تاریخ
+        posts.sort(key=lambda x: x[0])
+        newest_sh_x_by_channel[ch] = posts[-1][1] # ذخیره آخرین (جدیدترین) پست این کانال
             
-    return list(v2ray_links), list(mtproto_links), newest_sh_x_ips
+    return list(v2ray_links), list(mtproto_links), newest_sh_x_by_channel
 
 def send_to_telegram(text):
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
@@ -279,7 +281,7 @@ def main():
         return
 
     history = load_history()
-    new_v2ray, new_mtproto, sh_x_ips = fetch_raw_configs()
+    new_v2ray, new_mtproto, sh_x_ips_dict = fetch_raw_configs()
     
     unique_v2ray = []
     unique_mtproto = []
@@ -306,22 +308,23 @@ def main():
 
     total_sent = 0
     
-    # ================= ارسال آی‌پی‌های ش.خ =================
-    if ENABLE_SH_X_IP and sh_x_ips:
-        # برای جلوگیری از اسپم شدن آی‌پی‌های تکراری، هش می‌سازیم
-        ip_hash = "SH_X_" + "_".join(sorted(sh_x_ips))
-        if ip_hash not in history:
-            msg = "آی پی برنامه شیر و خورشید 🦁☀️\n\n"
-            msg += "<blockquote expandable><code>\n"
-            for ip in sh_x_ips:
-                msg += f"{ip}\n"
-            msg += "</code></blockquote>\n\n"
-            msg += f"⚙️ @{CHANNEL_ID}"
-            
-            send_to_telegram(msg)
-            history.add(ip_hash)
-            print(f"Sent {len(sh_x_ips)} Sh_X IPs.")
-            time.sleep(DELAY_BETWEEN_MSGS)
+    # ================= ارسال آی‌پی‌های ش.خ به تفکیک هر کانال در پست مجزا =================
+    if ENABLE_SH_X_IP and sh_x_ips_dict:
+        for channel_name, ips in sh_x_ips_dict.items():
+            # ایجاد یک هش اختصاصی متصل به آیدی همان کانال برای کنترل تکراری‌ها
+            ip_hash = f"SH_X_{channel_name}_" + "_".join(sorted(ips))
+            if ip_hash not in history:
+                msg = "آی پی برنامه شیر و خورشید 🦁☀️\n\n"
+                msg += "<blockquote expandable><code>\n"
+                for ip in ips:
+                    msg += f"{ip}\n"
+                msg += "</code></blockquote>\n\n"
+                msg += f"⚙️ @{CHANNEL_ID}"
+                
+                send_to_telegram(msg)
+                history.add(ip_hash)
+                print(f"Sent {len(ips)} Sh_X IPs from channel: {channel_name}")
+                time.sleep(DELAY_BETWEEN_MSGS)
 
     # ================= UI حرفه‌ای V2Ray =================
     for i in range(0, len(valid_v2ray), V2RAY_CHUNK_SIZE):
