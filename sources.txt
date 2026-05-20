@@ -4,4 +4,3 @@ persianvpnhub
 moftconfig
 v2ray_configs_pool
 https://raw.githubusercontent.com/therealaleph/Iran-configs/refs/heads/main/ir_configs.txt
-iDeathBirth
