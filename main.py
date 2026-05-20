@@ -18,6 +18,7 @@ MTPROTO_CHUNK_SIZE = 10
 DELAY_BETWEEN_MSGS = 10
 
 # تنظیمات کنترل ارسال
+ENABLE_INTERNET_PRO = False   # True = پیدا کردن و ارسال کانفیگ‌های اینترنت پرو | False = خاموش
 ENABLE_MTPROTO = False        
 ENABLE_SH_X_IP = True        
 
@@ -415,13 +416,14 @@ def main():
     raw_pro_v2ray = []
     standard_v2ray = []
     
+    # اعمال شرط برای جدا کردن کانفیگ‌های پرو در صورت روشن بودن تاگل
     for config in unique_v2ray:
-        if is_internet_pro_config(config):
+        if ENABLE_INTERNET_PRO and is_internet_pro_config(config):
             raw_pro_v2ray.append(config)
         else:
             standard_v2ray.append(config)
 
-    valid_pro_v2ray = filter_pro_configs(raw_pro_v2ray)
+    valid_pro_v2ray = filter_pro_configs(raw_pro_v2ray) if ENABLE_INTERNET_PRO else []
     valid_standard_v2ray = filter_iran_configs(standard_v2ray)
 
     if ENABLE_PING_FILTER:
@@ -450,34 +452,35 @@ def main():
                 print(f"Sent {len(ips)} Sh_X IPs from channel: {channel_name}")
                 time.sleep(DELAY_BETWEEN_MSGS)
 
-    # ================= ارسال کانفیگ‌های اینترنت پرو =================
-    for i in range(0, len(valid_pro_v2ray), V2RAY_CHUNK_SIZE):
-        chunk = valid_pro_v2ray[i:i + V2RAY_CHUNK_SIZE]
-        
-        msg = "👨🏻‍💻 مخصوص اینترنت پرو\n\n"
-        msg += "<blockquote expandable><code>\n"
-        all_configs = ""
-        for link in chunk:
-            host, port = extract_ip_port(link)
-            country_prefix = ""
-            if host:
-                country_prefix = get_country_info(host)
-                
-            updated_link = update_remark(link, f"{country_prefix}🚀@{CHANNEL_ID}")
-            escaped_link = html.escape(updated_link)
-            all_configs += f"{escaped_link}\n"
-        
-        msg += all_configs.strip()
-        msg += "\n</code>\n"
-        msg += "</blockquote>\n\n"
-        msg += f"📡 @{CHANNEL_ID}\n"
-        
-        send_to_telegram(msg)
-        total_sent += len(chunk)
-        
-        if i + V2RAY_CHUNK_SIZE < len(valid_pro_v2ray) or valid_standard_v2ray or (ENABLE_MTPROTO and valid_mtproto):
-            print(f"Sent {len(chunk)} PRO V2ray configs. Waiting {DELAY_BETWEEN_MSGS} seconds...")
-            time.sleep(DELAY_BETWEEN_MSGS)
+    # ================= ارسال کانفیگ‌های اینترنت پرو (در صورت روشن بودن تاگل) =================
+    if ENABLE_INTERNET_PRO:
+        for i in range(0, len(valid_pro_v2ray), V2RAY_CHUNK_SIZE):
+            chunk = valid_pro_v2ray[i:i + V2RAY_CHUNK_SIZE]
+            
+            msg = "👨🏻‍💻 مخصوص اینترنت پرو\n\n"
+            msg += "<blockquote expandable><code>\n"
+            all_configs = ""
+            for link in chunk:
+                host, port = extract_ip_port(link)
+                country_prefix = ""
+                if host:
+                    country_prefix = get_country_info(host)
+                    
+                updated_link = update_remark(link, f"{country_prefix}🚀@{CHANNEL_ID}")
+                escaped_link = html.escape(updated_link)
+                all_configs += f"{escaped_link}\n"
+            
+            msg += all_configs.strip()
+            msg += "\n</code>\n"
+            msg += "</blockquote>\n\n"
+            msg += f"📡 @{CHANNEL_ID}\n"
+            
+            send_to_telegram(msg)
+            total_sent += len(chunk)
+            
+            if i + V2RAY_CHUNK_SIZE < len(valid_pro_v2ray) or valid_standard_v2ray or (ENABLE_MTPROTO and valid_mtproto):
+                print(f"Sent {len(chunk)} PRO V2ray configs. Waiting {DELAY_BETWEEN_MSGS} seconds...")
+                time.sleep(DELAY_BETWEEN_MSGS)
 
     # ================= ارسال کانفیگ‌های معمولی (ایران) =================
     for i in range(0, len(valid_standard_v2ray), V2RAY_CHUNK_SIZE):
