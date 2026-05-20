@@ -344,6 +344,12 @@ def fetch_raw_configs():
                     text = msg_text_div.get_text(separator=' ')
                     text_lower = text.lower()
                     
+                    # ==============================================================
+                    # نادیده گرفتن پست‌هایی که شامل کلمات مربوط به سایفون یا ترکیبی هستند
+                    if any(keyword in text_lower for keyword in ['psiphon', 'سایفون', 'ترکیبی']):
+                        continue
+                    # ==============================================================
+                    
                     if channel in channels:
                         for c in re.findall(pattern_v2ray, text): v2ray_links.add(c)
                         for c in re.findall(pattern_tg, text): mtproto_links.add(c)
