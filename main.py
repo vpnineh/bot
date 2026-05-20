@@ -40,7 +40,7 @@ def load_history():
 
 def save_history(history):
     with open(HISTORY_FILE, 'w', encoding='utf-8') as f:
-        f.write('\n'.join(list(history)[-3000:]))
+        f.write('\n'.join(list(history)[-8000:]))
 
 def load_sources():
     """خواندن منابع عمومی از فایل متنی و تفکیک کانال‌ها و لینک‌های ساب"""
