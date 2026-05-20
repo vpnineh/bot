@@ -1,9 +1,7 @@
 name: Config Auto Forwarder
 
 on:
-  # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
-  # Runs the workflow automatically every hour
   schedule:
     - cron: '7,22,37,52 * * * *'
     
@@ -26,9 +24,10 @@ jobs:
         run: |
           pip install -r requirements.txt
 
-      # این مرحله برای دانلود دیتابیس آفلاین آی‌پی‌ها اضافه شد
-      - name: Download GeoIP Database
-        run: wget -O GeoLite2-Country.mmdb "https://github.com/P3TERX/GeoLite.mmdb/raw/download/GeoLite2-Country.mmdb"
+      - name: Download GeoIP Databases
+        run: |
+          wget -O GeoLite2-Country.mmdb "https://github.com/P3TERX/GeoLite.mmdb/raw/download/GeoLite2-Country.mmdb"
+          wget -O GeoLite2-ASN.mmdb "https://github.com/P3TERX/GeoLite.mmdb/raw/download/GeoLite2-ASN.mmdb"
 
       - name: Run Script
         env:
