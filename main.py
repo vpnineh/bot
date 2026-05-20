@@ -18,7 +18,7 @@ DELAY_BETWEEN_MSGS = 10
 
 # تنظیمات کنترل ارسال
 ENABLE_MTPROTO = False        # True = پروکسی‌های تلگرام ارسال شوند | False = متوقف کردن ارسال پروکسی تلگرام
-ENABLE_LION_SUN_IP = True    # True = پیدا کردن و ارسال آی‌پی‌های شیر و خورشید | False = خاموش
+ENABLE_SH_X_IP = True        # True = پیدا کردن و ارسال آی‌پی‌های ش.خ | False = خاموش
 
 # تنظیمات مربوط به فیلتر پینگ (ایران)
 ENABLE_PING_FILTER = True # True = فقط بدون پینگ‌ها | False = ارسال همه کانفیگ‌ها بدون تست
@@ -30,6 +30,7 @@ TARGET_CHANNEL = os.environ.get('TARGET_CHANNEL')
 
 HISTORY_FILE = 'history.txt'
 SOURCES_FILE = 'sources.txt'
+SH_X_SOURCES_FILE = 'x.txt' # فایل حاوی منابع اختصاصی آی‌پی ش.خ
 
 def load_history():
     if os.path.exists(HISTORY_FILE):
@@ -42,7 +43,7 @@ def save_history(history):
         f.write('\n'.join(list(history)[-3000:]))
 
 def load_sources():
-    """خواندن منابع از فایل متنی و تفکیک کانال‌ها و لینک‌های ساب"""
+    """خواندن منابع عمومی از فایل متنی و تفکیک کانال‌ها و لینک‌های ساب"""
     channels = []
     subs = []
     
@@ -55,7 +56,7 @@ def load_sources():
             f.write("filembad\n")
             f.write("moftconfig\n")
             f.write("v2ray_configs_pool\n")
-            f.write("# https://example.com/sub_linkn")
+            f.write("# https://example.com/sub_link\n")
     
     with open(SOURCES_FILE, 'r', encoding='utf-8') as f:
         for line in f:
@@ -75,6 +76,29 @@ def load_sources():
                 channels.append(line)
                 
     return channels, subs
+
+def load_sh_x_channels():
+    """خواندن کانال‌های اختصاصی جهت بررسی آی‌پی ش.خ از فایل x.txt"""
+    sh_x_channels = []
+    if not os.path.exists(SH_X_SOURCES_FILE):
+        with open(SH_X_SOURCES_FILE, 'w', encoding='utf-8') as f:
+            f.write("# لیست کانال‌های تلگرام برای بررسی اختصاصی آی‌پی ش.خ را اینجا وارد کنید (هر خط یک آیدی)\n")
+            f.write("oneclickvpnkeys\n")
+            f.write("moftconfig\n")
+            
+    with open(SH_X_SOURCES_FILE, 'r', encoding='utf-8') as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith('#'):
+                continue
+            if line.startswith('@'):
+                sh_x_channels.append(line[1:])
+            elif 't.me/' in line:
+                ch = line.split('t.me/')[-1].split('/')[0].replace('s', '').replace('+', '')
+                if ch: sh_x_channels.append(ch)
+            else:
+                sh_x_channels.append(line)
+    return sh_x_channels
 
 def update_remark(config, remark):
     if config.startswith('vmess://'):
@@ -153,19 +177,23 @@ def decode_sub_text(text):
 
 def fetch_raw_configs():
     channels, subs = load_sources()
-    print(f"Loaded {len(channels)} channels and {len(subs)} sub links.")
+    sh_x_channels = load_sh_x_channels() # بارگذاری کانال‌های مخصوص ش.خ از x.txt
+    
+    print(f"Loaded {len(channels)} general channels, {len(sh_x_channels)} sh_x channels, and {len(subs)} sub links.")
     
     v2ray_links, mtproto_links = set(), set()
     pattern_v2ray = r'(?:vless|vmess|trojan|ss|ssr|tuic|hysteria2?)://[^\s"\'<>\n]+'
     pattern_tg = r'(?:https?://t\.me/proxy\?[^\s"\'<>\n]+|tg://proxy\?[^\s"\'<>\n]+)'
     pattern_ip = r'\b(?:\d{1,3}\.){3}\d{1,3}\b' # پترن برای شناسایی IPv4
     
-    all_lion_sun_posts = []
-
+    all_sh_x_posts = []
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
 
+    # ادغام تمام کانال‌ها برای بررسی کلی کانفیگ‌ها در یک لوپ
+    union_channels = list(set(channels + sh_x_channels))
+
     # 1. پردازش کانال‌های تلگرام
-    for channel in channels:
+    for channel in union_channels:
         try:
             url = f"https://t.me/s/{channel}"
             response = requests.get(url, headers=headers, timeout=15)
@@ -180,36 +208,38 @@ def fetch_raw_configs():
                     text = msg_text_div.get_text(separator=' ')
                     text_lower = text.lower()
                     
-                    # استخراج کانفیگ‌های معمولی
-                    for c in re.findall(pattern_v2ray, text): v2ray_links.add(c)
-                    for c in re.findall(pattern_tg, text): mtproto_links.add(c)
-                    
-                    for a_tag in msg_text_div.find_all('a'):
-                        href = a_tag.get('href')
-                        if href:
-                            for c in re.findall(pattern_v2ray, href): v2ray_links.add(c)
-                            for c in re.findall(pattern_tg, href): mtproto_links.add(c)
+                    # استخراج کانفیگ‌های معمولی (اگر کانال جزو لیست عمومی sources.txt باشد)
+                    if channel in channels:
+                        for c in re.findall(pattern_v2ray, text): v2ray_links.add(c)
+                        for c in re.findall(pattern_tg, text): mtproto_links.add(c)
+                        
+                        for a_tag in msg_text_div.find_all('a'):
+                            href = a_tag.get('href')
+                            if href:
+                                for c in re.findall(pattern_v2ray, href): v2ray_links.add(c)
+                                for c in re.findall(pattern_tg, href): mtproto_links.add(c)
                             
-                    # استخراج پست‌های مربوط به شیر و خورشید (فارسی یا فینگلیش)
-                    has_persian_keywords = 'شیر' in text and 'خورشید' in text
-                    has_english_keywords = 'shir' in text_lower and 'khorshid' in text_lower
-                    
-                    # بررسی وجود لیست آی‌پی (حداقل ۴ آی‌پی یکتا) و عدم وجود پروتکل‌های V2ray/Proxy برای جلوگیری از اشتباه
-                    ips = list(set(re.findall(pattern_ip, text)))
-                    has_configs = bool(re.findall(pattern_v2ray, text)) or bool(re.findall(pattern_tg, text))
-                    is_ip_list = len(ips) >= 4 and not has_configs
-                    
-                    if ENABLE_LION_SUN_IP and (has_persian_keywords or has_english_keywords or is_ip_list):
-                        if ips:
-                            # استخراج زمان پست برای پیدا کردن جدیدترین
-                            time_tag = widget.find('time')
-                            dt_str = time_tag.get('datetime', '') if time_tag else ''
-                            all_lion_sun_posts.append((dt_str, ips))
+                    # استخراج پست‌های مربوط به ش.خ (فقط در صورتی که کانال در لیست x.txt باشد)
+                    if ENABLE_SH_X_IP and (channel in sh_x_channels):
+                        has_persian_keywords = 'شیر' in text and 'خورشید' in text
+                        has_english_keywords = 'shir' in text_lower and 'khorshid' in text_lower
+                        
+                        # بررسی وجود لیست آی‌پی (حداقل ۴ آی‌پی یکتا) و عدم وجود پروتکل‌های V2ray/Proxy برای جلوگیری از اشتباه
+                        ips = list(set(re.findall(pattern_ip, text)))
+                        has_configs = bool(re.findall(pattern_v2ray, text)) or bool(re.findall(pattern_tg, text))
+                        is_ip_list = len(ips) >= 4 and not has_configs
+                        
+                        if has_persian_keywords or has_english_keywords or is_ip_list:
+                            if ips:
+                                # استخراج زمان پست برای پیدا کردن جدیدترین
+                                time_tag = widget.find('time')
+                                dt_str = time_tag.get('datetime', '') if time_tag else ''
+                                all_sh_x_posts.append((dt_str, ips))
                             
         except Exception as e:
             print(f"Error fetching channel {channel}: {e}")
 
-    # 2. پردازش لینک‌های ساب
+    # 2. پردازش لینک‌های ساب عمومی
     for sub in subs:
         try:
             response = requests.get(sub, headers=headers, timeout=15)
@@ -222,14 +252,14 @@ def fetch_raw_configs():
         except Exception as e:
             print(f"Error fetching sub link {sub}: {e}")
             
-    # پیدا کردن جدیدترین آی‌پی‌های شیر و خورشید از بین تمام پست‌های فیلتر شده
-    newest_lion_sun_ips = []
-    if all_lion_sun_posts:
+    # پیدا کردن جدیدترین آی‌پی‌های ش.خ از بین تمام پست‌های فیلتر شده از فایل x.txt
+    newest_sh_x_ips = []
+    if all_sh_x_posts:
         # سورت کردن بر اساس تاریخ (نزولی به صعودی)؛ آخرین آیتم جدیدترین پست خواهد بود
-        all_lion_sun_posts.sort(key=lambda x: x[0])
-        newest_lion_sun_ips = all_lion_sun_posts[-1][1]
+        all_sh_x_posts.sort(key=lambda x: x[0])
+        newest_sh_x_ips = all_sh_x_posts[-1][1]
             
-    return list(v2ray_links), list(mtproto_links), newest_lion_sun_ips
+    return list(v2ray_links), list(mtproto_links), newest_sh_x_ips
 
 def send_to_telegram(text):
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
@@ -249,7 +279,7 @@ def main():
         return
 
     history = load_history()
-    new_v2ray, new_mtproto, lion_sun_ips = fetch_raw_configs()
+    new_v2ray, new_mtproto, sh_x_ips = fetch_raw_configs()
     
     unique_v2ray = []
     unique_mtproto = []
@@ -276,21 +306,21 @@ def main():
 
     total_sent = 0
     
-    # ================= ارسال آی‌پی‌های شیر و خورشید =================
-    if ENABLE_LION_SUN_IP and lion_sun_ips:
+    # ================= ارسال آی‌پی‌های ش.خ =================
+    if ENABLE_SH_X_IP and sh_x_ips:
         # برای جلوگیری از اسپم شدن آی‌پی‌های تکراری، هش می‌سازیم
-        ip_hash = "LIONSUN_" + "_".join(sorted(lion_sun_ips))
+        ip_hash = "SH_X_" + "_".join(sorted(sh_x_ips))
         if ip_hash not in history:
-            msg = "آی پی برنامه 🦁☀️\n\n"
+            msg = "آی پی برنامه شیر و خورشید 🦁☀️\n\n"
             msg += "<blockquote expandable><code>\n"
-            for ip in lion_sun_ips:
+            for ip in sh_x_ips:
                 msg += f"{ip}\n"
             msg += "</code></blockquote>\n\n"
             msg += f"⚙️ @{CHANNEL_ID}"
             
             send_to_telegram(msg)
             history.add(ip_hash)
-            print(f"Sent {len(lion_sun_ips)} Lion&Sun IPs.")
+            print(f"Sent {len(sh_x_ips)} Sh_X IPs.")
             time.sleep(DELAY_BETWEEN_MSGS)
 
     # ================= UI حرفه‌ای V2Ray =================
