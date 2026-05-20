@@ -8,3 +8,4 @@ https://raw.githubusercontent.com/therealaleph/Iran-configs/refs/heads/main/ir_c
 live_CONf
 truevpn3
 InfoTech_VK
+Vasl_beshim
