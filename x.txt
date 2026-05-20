@@ -10,3 +10,4 @@ apmode_ir
 vpn_Click
 Vasl_beshim
 anty_filter
+Vpn_Shield
