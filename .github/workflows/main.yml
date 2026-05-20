@@ -2,8 +2,8 @@ name: Config Auto Forwarder
 
 on:
   workflow_dispatch:
-  schedule:
-    - cron: '7,22,37,52 * * * *'
+  # schedule:
+  #   - cron: '7,22,37,52 * * * *'
     
 jobs:
   run-scraper:
@@ -56,4 +56,5 @@ jobs:
           git config --local user.name "GitHub Action"
           git add history.txt sub/ 
           git commit -m "Auto-update history and sub [skip ci]" || echo "No new configs, nothing to commit"
+          git pull --rebase origin main
           git push
