@@ -142,7 +142,6 @@ def extract_ip_port(config):
     return None, None
 
 def get_country_info(ip_or_host):
-    """آی‌پی را می‌گیرد و پرچم + مخفف کشور را به شکل پیوسته برمی‌گرداند"""
     db_path = 'GeoLite2-Country.mmdb'
     if not os.path.exists(db_path):
         return ""
@@ -209,7 +208,7 @@ def check_ping(config):
 def filter_no_ping_configs(configs):
     selected = []
     print(f"Checking {len(configs)} configs for NO-PING rule (Standard Net)...")
-    with concurrent.futures.ThreadPoolExecutor(max_workers=20) as executor:
+    with concurrent.futures.ThreadPoolExecutor(max_workers=30) as executor:
         results = executor.map(lambda c: (c, check_ping(c)), configs)
         for config, has_ping in results:
             if not has_ping: 
@@ -224,41 +223,50 @@ def filter_pro_configs(configs):
                  'azure', 'oracle', 'leaseweb', 'contabo', 'vultr', 'aruba', 'akamai', 'cloudflare', 'fastly']
     
     asn_db_path = 'GeoLite2-ASN.mmdb'
-    valid_asn_configs = []
-    
+    reader = None
     if os.path.exists(asn_db_path):
         try:
-            with geoip2.database.Reader(asn_db_path) as reader:
-                for config in configs:
-                    host, port = extract_ip_port(config)
-                    if not host: continue
-                    
-                    try:
-                        response = reader.asn(host)
-                        org = response.autonomous_system_organization.lower()
-                        if any(dc in org for dc in valid_dcs):
-                            valid_asn_configs.append(config)
-                    except (geoip2.errors.AddressNotFoundError, Exception):
-                        pass
+            reader = geoip2.database.Reader(asn_db_path)
         except Exception as e:
             print(f"ASN Database Error: {e}")
-    else:
-        print("ASN DB not found! Skipping datacenter check.")
-        valid_asn_configs = configs
 
-    print(f"Found {len(valid_asn_configs)} PRO configs with Valid Datacenters. Checking Ping...")
-    
-    with concurrent.futures.ThreadPoolExecutor(max_workers=20) as executor:
-        results = executor.map(lambda c: (c, check_ping(c)), valid_asn_configs)
-        for config, has_ping in results:
-            if has_ping: 
+    def is_valid_pro(config):
+        host, port = extract_ip_port(config)
+        if not host: return False
+        try:
+            if not re.match(r'\b(?:\d{1,3}\.){3}\d{1,3}\b', host):
+                ip = socket.gethostbyname(host)
+            else:
+                ip = host
+                
+            if reader:
+                org = reader.asn(ip).autonomous_system_organization.lower()
+                if not any(dc in org for dc in valid_dcs):
+                    return False
+            
+            socket.setdefaulttimeout(PING_TIMEOUT)
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            s.connect((ip, int(port)))
+            s.close()
+            return True
+        except Exception:
+            return False
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=30) as executor:
+        results = executor.map(lambda c: (c, is_valid_pro(c)), configs)
+        for config, is_valid in results:
+            if is_valid: 
                 selected_pro.append(config)
                 
+    if reader:
+        reader.close()
+        
+    print(f"Found {len(selected_pro)} PRO configs with Valid Datacenters and Active Ping.")
     return selected_pro
 
 def filter_iran_configs(configs):
     iran_configs = []
-    print(f"Checking {len(configs)} V2Ray configs for IR location...")
+    print(f"Checking {len(configs)} V2Ray configs for IR location (Multi-threaded)...")
     db_path = 'GeoLite2-Country.mmdb'
     
     if not os.path.exists(db_path):
@@ -266,26 +274,33 @@ def filter_iran_configs(configs):
         return []
 
     try:
-        with geoip2.database.Reader(db_path) as reader:
-            for config in configs:
-                host, port = extract_ip_port(config)
-                if not host:
-                    continue
-                
-                try:
-                    if not re.match(r'\b(?:\d{1,3}\.){3}\d{1,3}\b', host):
-                        ip = socket.gethostbyname(host)
-                    else:
-                        ip = host
-                        
-                    response = reader.country(ip)
-                    if response.country.iso_code == 'IR':
-                        iran_configs.append(config)
-                except (geoip2.errors.AddressNotFoundError, socket.gaierror):
-                    pass
+        reader = geoip2.database.Reader(db_path)
     except Exception as e:
-        print(f"GeoIP Database Error: {e}")
-        
+        print(f"Error opening GeoIP DB: {e}")
+        return []
+
+    def check_is_iran(config):
+        host, port = extract_ip_port(config)
+        if not host: return False
+        try:
+            if not re.match(r'\b(?:\d{1,3}\.){3}\d{1,3}\b', host):
+                ip = socket.gethostbyname(host)
+            else:
+                ip = host
+            response = reader.country(ip)
+            if response.country.iso_code == 'IR':
+                return True
+        except Exception:
+            pass
+        return False
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=30) as executor:
+        results = executor.map(lambda c: (c, check_is_iran(c)), configs)
+        for config, is_ir in results:
+            if is_ir:
+                iran_configs.append(config)
+                
+    reader.close()
     print(f"Found {len(iran_configs)} IR configs out of {len(configs)}.")
     return iran_configs
 
@@ -401,19 +416,12 @@ def main():
     unique_v2ray = []
     unique_mtproto = []
 
-    # ================= فیلتر تکراری‌های عمیق (Deep Deduplication) =================
+    # ================= فیلتر تکراری بر اساس متد قبلی و پایدار =================
     for link in new_v2ray:
-        host, port = extract_ip_port(link)
-        if host and port:
-            # ساخت کلید اختصاصی بر اساس آی‌پی و پورت
-            unique_key = f"{host}:{port}"
-        else:
-            # اگر دامین و پورت به درستی استخراج نشد، از کلینک خام به عنوان کلید استفاده می‌شود
-            unique_key = link.split('#')[0] if not link.startswith('vmess') else link
-            
-        if unique_key not in history:
+        base = link.split('#')[0] if not link.startswith('vmess') else link
+        if base not in history:
             unique_v2ray.append(link)
-            history.add(unique_key)
+            history.add(base)
             
     for link in new_mtproto:
         if link not in history:
@@ -441,11 +449,10 @@ def main():
         valid_mtproto = unique_mtproto
 
     total_sent = 0
+    sub_links = [] # لیست ذخیره کانفیگ‌ها برای فایل سابسکریپشن
     
-    # ================= اصلاح منطق هش آی‌پی شیر و خورشید برای جلوگیری از تکرار =================
     if ENABLE_SH_X_IP and sh_x_ips_dict:
         for channel_name, ips in sh_x_ips_dict.items():
-            # نام کانال حذف شد تا کلید بر اساس خود آی‌پی‌ها ساخته شود
             ip_hash = "SH_X_" + "_".join(sorted(ips))
             if ip_hash not in history:
                 msg = "آی پی برنامه 🦁☀️\n\n"
@@ -479,6 +486,7 @@ def main():
                 updated_link = update_remark(link, f"{country_prefix}🚀@{CHANNEL_ID}")
                 escaped_link = html.escape(updated_link)
                 all_configs += f"{escaped_link}\n"
+                sub_links.append(updated_link) # اضافه کردن به لیست سابسکریپشن
             
             msg += all_configs.strip()
             msg += "\n</code>\n"
@@ -508,6 +516,7 @@ def main():
             updated_link = update_remark(link, f"{country_prefix}🚀@{CHANNEL_ID}")
             escaped_link = html.escape(updated_link)
             all_configs += f"{escaped_link}\n"
+            sub_links.append(updated_link) # اضافه کردن به لیست سابسکریپشن
         
         msg += all_configs.strip()
         msg += "\n</code>\n"
@@ -552,8 +561,17 @@ def main():
                 print(f"Sent {len(chunk)} MTProto configs. Waiting {DELAY_BETWEEN_MSGS} seconds...")
                 time.sleep(DELAY_BETWEEN_MSGS)
 
+    # ================= ساخت و ذخیره فایل سابسکریپشن =================
+    if sub_links:
+        os.makedirs('sub', exist_ok=True)
+        sub_content = '\n'.join(sub_links)
+        sub_b64 = base64.b64encode(sub_content.encode('utf-8')).decode('utf-8')
+        with open('sub/sub.txt', 'w', encoding='utf-8') as f:
+            f.write(sub_b64)
+        print(f"Saved {len(sub_links)} configs to subscription file (sub/sub.txt).")
+
     save_history(history)
-    print(f"Process finished. Successfully sent {total_sent} standard configs.")
+    print(f"Process finished. Successfully sent {total_sent} configs.")
 
 if __name__ == '__main__':
     main()
