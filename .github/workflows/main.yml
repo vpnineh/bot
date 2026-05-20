@@ -26,6 +26,10 @@ jobs:
         run: |
           pip install -r requirements.txt
 
+      # این مرحله برای دانلود دیتابیس آفلاین آی‌پی‌ها اضافه شد
+      - name: Download GeoIP Database
+        run: wget -O GeoLite2-Country.mmdb "https://github.com/P3TERX/GeoLite.mmdb/raw/download/GeoLite2-Country.mmdb"
+
       - name: Run Script
         env:
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
