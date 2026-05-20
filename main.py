@@ -314,7 +314,7 @@ def main():
             # ایجاد یک هش اختصاصی متصل به آیدی همان کانال برای کنترل تکراری‌ها
             ip_hash = f"SH_X_{channel_name}_" + "_".join(sorted(ips))
             if ip_hash not in history:
-                msg = "آی پی برنامه شیر و خورشید 🦁☀️\n\n"
+                msg = "شیر و خورشید 🦁☀️\n\n"
                 msg += "<blockquote expandable><code>\n"
                 for ip in ips:
                     msg += f"{ip}\n"
