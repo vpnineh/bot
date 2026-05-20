@@ -194,8 +194,12 @@ def fetch_raw_configs():
                     has_persian_keywords = 'شیر' in text and 'خورشید' in text
                     has_english_keywords = 'shir' in text_lower and 'khorshid' in text_lower
                     
-                    if ENABLE_LION_SUN_IP and (has_persian_keywords or has_english_keywords):
-                        ips = list(set(re.findall(pattern_ip, text))) # حذف آی‌پی‌های تکراری در یک پست
+                    # بررسی وجود لیست آی‌پی (حداقل ۴ آی‌پی یکتا) و عدم وجود پروتکل‌های V2ray/Proxy برای جلوگیری از اشتباه
+                    ips = list(set(re.findall(pattern_ip, text)))
+                    has_configs = bool(re.findall(pattern_v2ray, text)) or bool(re.findall(pattern_tg, text))
+                    is_ip_list = len(ips) >= 4 and not has_configs
+                    
+                    if ENABLE_LION_SUN_IP and (has_persian_keywords or has_english_keywords or is_ip_list):
                         if ips:
                             # استخراج زمان پست برای پیدا کردن جدیدترین
                             time_tag = widget.find('time')
@@ -218,10 +222,10 @@ def fetch_raw_configs():
         except Exception as e:
             print(f"Error fetching sub link {sub}: {e}")
             
-    # پیدا کردن جدیدترین آی‌پی‌های شیر و خورشید
+    # پیدا کردن جدیدترین آی‌پی‌های شیر و خورشید از بین تمام پست‌های فیلتر شده
     newest_lion_sun_ips = []
     if all_lion_sun_posts:
-        # سورت کردن بر اساس تاریخ برای به دست آوردن آخرین و جدیدترین پست در انتهای لیست
+        # سورت کردن بر اساس تاریخ (نزولی به صعودی)؛ آخرین آیتم جدیدترین پست خواهد بود
         all_lion_sun_posts.sort(key=lambda x: x[0])
         newest_lion_sun_ips = all_lion_sun_posts[-1][1]
             
@@ -277,8 +281,8 @@ def main():
         # برای جلوگیری از اسپم شدن آی‌پی‌های تکراری، هش می‌سازیم
         ip_hash = "LIONSUN_" + "_".join(sorted(lion_sun_ips))
         if ip_hash not in history:
-            msg = "آی پی برنامه شیر و خورشید 🦁☀️\n\n"
-            msg += "<blockquote><code>\n"
+            msg = "آی پی برنامه 🦁☀️\n\n"
+            msg += "<blockquote expandable><code>\n"
             for ip in lion_sun_ips:
                 msg += f"{ip}\n"
             msg += "</code></blockquote>\n\n"
