@@ -7,3 +7,4 @@ https://raw.githubusercontent.com/therealaleph/Iran-configs/refs/heads/main/ir_c
 #https://raw.githubusercontent.com/vpnineh/v2/refs/heads/main/merged
 live_CONf
 truevpn3
+InfoTech_VK
