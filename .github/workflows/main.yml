@@ -24,7 +24,22 @@ jobs:
         run: |
           pip install -r requirements.txt
 
+      # مرحله جدید: تولید کلید زمان‌دار (بر اساس سال و شماره هفته) برای ذخیره کش
+      - name: Get Date for Cache Key
+        id: get-date
+        run: echo "date=$(date +'%Y-%U')" >> $GITHUB_ENV
+        
+      # فراخوانی کش (اگر وجود داشته باشد)
+      - name: Cache GeoIP Databases
+        id: cache-geoip
+        uses: actions/cache@v3
+        with:
+          path: '*.mmdb'
+          key: geoip-db-${{ env.date }}
+          
+      # دانلود فایل‌ها فقط در صورتی که کش پیدا نشود (مثلاً در شروع هفته جدید)
       - name: Download GeoIP Databases
+        if: steps.cache-geoip.outputs.cache-hit != 'true'
         run: |
           wget -O GeoLite2-Country.mmdb "https://github.com/P3TERX/GeoLite.mmdb/raw/download/GeoLite2-Country.mmdb"
           wget -O GeoLite2-ASN.mmdb "https://github.com/P3TERX/GeoLite.mmdb/raw/download/GeoLite2-ASN.mmdb"
