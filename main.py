@@ -9,20 +9,21 @@ import html
 import socket
 import concurrent.futures
 from bs4 import BeautifulSoup
+import geoip2.database
 
 # ================= تنظیمات =================
 CHANNEL_ID = "VPNine1" 
-V2RAY_CHUNK_SIZE = 10    # حتماً روی ۱۵ بماند تا ارور لیمیت کاراکتر تلگرام ندهد
+V2RAY_CHUNK_SIZE = 10    
 MTPROTO_CHUNK_SIZE = 10  
 DELAY_BETWEEN_MSGS = 10
 
 # تنظیمات کنترل ارسال
-ENABLE_MTPROTO = False        # True = پروکسی‌های تلگرام ارسال شوند | False = متوقف کردن ارسال پروکسی تلگرام
-ENABLE_SH_X_IP = True        # True = پیدا کردن و ارسال آی‌پی‌های ش.خ | False = خاموش
+ENABLE_MTPROTO = False        
+ENABLE_SH_X_IP = True        
 
 # تنظیمات مربوط به فیلتر پینگ (ایران)
-ENABLE_PING_FILTER = True # True = فقط بدون پینگ‌ها | False = ارسال همه کانفیگ‌ها بدون تست
-PING_TIMEOUT = 2.0       # حداکثر زمان انتظار برای پینگ (ثانیه)
+ENABLE_PING_FILTER = True 
+PING_TIMEOUT = 2.0       
 
 BOT_TOKEN = os.environ.get('BOT_TOKEN')
 TARGET_CHANNEL = os.environ.get('TARGET_CHANNEL')
@@ -30,7 +31,7 @@ TARGET_CHANNEL = os.environ.get('TARGET_CHANNEL')
 
 HISTORY_FILE = 'history.txt'
 SOURCES_FILE = 'sources.txt'
-SH_X_SOURCES_FILE = 'x.txt' # فایل حاوی منابع اختصاصی آی‌پی ش.خ
+SH_X_SOURCES_FILE = 'x.txt'
 
 def load_history():
     if os.path.exists(HISTORY_FILE):
@@ -43,7 +44,6 @@ def save_history(history):
         f.write('\n'.join(list(history)[-8000:]))
 
 def load_sources():
-    """خواندن منابع عمومی از فایل متنی و تفکیک کانال‌ها و لینک‌های ساب"""
     channels = []
     subs = []
     
@@ -56,7 +56,6 @@ def load_sources():
             f.write("filembad\n")
             f.write("moftconfig\n")
             f.write("v2ray_configs_pool\n")
-            f.write("# https://example.com/sub_link\n")
     
     with open(SOURCES_FILE, 'r', encoding='utf-8') as f:
         for line in f:
@@ -78,11 +77,10 @@ def load_sources():
     return channels, subs
 
 def load_sh_x_channels():
-    """خواندن کانال‌های اختصاصی جهت بررسی آی‌پی ش.خ از فایل x.txt"""
     sh_x_channels = []
     if not os.path.exists(SH_X_SOURCES_FILE):
         with open(SH_X_SOURCES_FILE, 'w', encoding='utf-8') as f:
-            f.write("# لیست کانال‌های تلگرام برای بررسی اختصاصی آی‌پی ش.خ را اینجا وارد کنید (هر خط یک آیدی)\n")
+            f.write("# لیست کانال‌های تلگرام برای بررسی اختصاصی آی‌پی ش.خ\n")
             f.write("oneclickvpnkeys\n")
             f.write("moftconfig\n")
             
@@ -166,6 +164,41 @@ def filter_no_ping_configs(configs):
                 selected.append(config)
     return selected
 
+def filter_iran_configs(configs):
+    iran_configs = []
+    print(f"Checking {len(configs)} V2Ray configs for IR location...")
+    db_path = 'GeoLite2-Country.mmdb'
+    
+    if not os.path.exists(db_path):
+        print(f"Error: {db_path} not found! Skipping GeoIP filter (returning empty).")
+        return []
+
+    try:
+        with geoip2.database.Reader(db_path) as reader:
+            for config in configs:
+                host, port = extract_ip_port(config)
+                if not host:
+                    continue
+                
+                try:
+                    # بررسی آی‌پی بودن یا دامین بودن
+                    if not re.match(r'\b(?:\d{1,3}\.){3}\d{1,3}\b', host):
+                        # اگر دامین است، به آی‌پی تبدیل کن (Resolve)
+                        ip = socket.gethostbyname(host)
+                    else:
+                        ip = host
+                        
+                    response = reader.country(ip)
+                    if response.country.iso_code == 'IR':
+                        iran_configs.append(config)
+                except (geoip2.errors.AddressNotFoundError, socket.gaierror):
+                    pass
+    except Exception as e:
+        print(f"GeoIP Database Error: {e}")
+        
+    print(f"Found {len(iran_configs)} IR configs out of {len(configs)}.")
+    return iran_configs
+
 def decode_sub_text(text):
     try:
         clean_text = text.strip().replace('\n', '').replace('\r', '')
@@ -186,12 +219,11 @@ def fetch_raw_configs():
     pattern_tg = r'(?:https?://t\.me/proxy\?[^\s"\'<>\n]+|tg://proxy\?[^\s"\'<>\n]+)'
     pattern_ip = r'\b(?:\d{1,3}\.){3}\d{1,3}\b'
     
-    sh_x_posts_by_channel = {} # ذخیره تفکیک‌شده پست‌های هر کانال ش.خ
+    sh_x_posts_by_channel = {} 
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
 
     union_channels = list(set(channels + sh_x_channels))
 
-    # 1. پردازش کانال‌های تلگرام
     for channel in union_channels:
         try:
             url = f"https://t.me/s/{channel}"
@@ -207,7 +239,6 @@ def fetch_raw_configs():
                     text = msg_text_div.get_text(separator=' ')
                     text_lower = text.lower()
                     
-                    # استخراج کانفیگ‌های معمولی (اگر کانال جزو لیست عمومی sources.txt باشد)
                     if channel in channels:
                         for c in re.findall(pattern_v2ray, text): v2ray_links.add(c)
                         for c in re.findall(pattern_tg, text): mtproto_links.add(c)
@@ -218,19 +249,16 @@ def fetch_raw_configs():
                                 for c in re.findall(pattern_v2ray, href): v2ray_links.add(c)
                                 for c in re.findall(pattern_tg, href): mtproto_links.add(c)
                             
-                    # استخراج پست‌های مربوط به ش.خ (فقط در صورتی که کانال در لیست x.txt باشد)
                     if ENABLE_SH_X_IP and (channel in sh_x_channels):
                         has_persian_keywords = 'شیر' in text and 'خورشید' in text
                         has_english_keywords = 'shir' in text_lower and 'khorshid' in text_lower
                         
-                        # بررسی وجود لیست آی‌پی (حداقل ۴ آی‌پی یکتا) و عدم وجود پروتکل‌های V2ray/Proxy برای جلوگیری از اشتباه
                         ips = list(set(re.findall(pattern_ip, text)))
                         has_configs = bool(re.findall(pattern_v2ray, text)) or bool(re.findall(pattern_tg, text))
                         is_ip_list = len(ips) >= 4 and not has_configs
                         
                         if has_persian_keywords or has_english_keywords or is_ip_list:
                             if ips:
-                                # استخراج زمان پست برای پیدا کردن جدیدترین
                                 time_tag = widget.find('time')
                                 dt_str = time_tag.get('datetime', '') if time_tag else ''
                                 
@@ -241,7 +269,6 @@ def fetch_raw_configs():
         except Exception as e:
             print(f"Error fetching channel {channel}: {e}")
 
-    # 2. پردازش لینک‌های ساب عمومی
     for sub in subs:
         try:
             response = requests.get(sub, headers=headers, timeout=15)
@@ -254,12 +281,10 @@ def fetch_raw_configs():
         except Exception as e:
             print(f"Error fetching sub link {sub}: {e}")
             
-    # پیدا کردن جدیدترین آی‌پی‌های ش.خ به تفکیک «هر کانال» به صورت جداگانه
     newest_sh_x_by_channel = {}
     for ch, posts in sh_x_posts_by_channel.items():
-        # سورت کردن پست‌های همان کانال بر اساس تاریخ
         posts.sort(key=lambda x: x[0])
-        newest_sh_x_by_channel[ch] = posts[-1][1] # ذخیره آخرین (جدیدترین) پست این کانال
+        newest_sh_x_by_channel[ch] = posts[-1][1] 
             
     return list(v2ray_links), list(mtproto_links), newest_sh_x_by_channel
 
@@ -297,21 +322,22 @@ def main():
             unique_mtproto.append(link)
             history.add(link)
 
+    # 1. فیلتر کردن کانفیگ‌های v2ray و جدا کردن سرورهای ایران
+    valid_v2ray = filter_iran_configs(unique_v2ray)
+
+    # 2. تست پینگ روی مواردی که باقیمانده (ایران‌های v2ray و تمام پروکسی‌های تلگرام)
     if ENABLE_PING_FILTER:
         print("Ping filter is ON. Filtering configs...")
-        valid_v2ray = filter_no_ping_configs(unique_v2ray)
+        valid_v2ray = filter_no_ping_configs(valid_v2ray)
         valid_mtproto = filter_no_ping_configs(unique_mtproto)
     else:
         print("Ping filter is OFF. Processing all new configs...")
-        valid_v2ray = unique_v2ray
         valid_mtproto = unique_mtproto
 
     total_sent = 0
     
-    # ================= ارسال آی‌پی‌های ش.خ به تفکیک هر کانال در پست مجزا =================
     if ENABLE_SH_X_IP and sh_x_ips_dict:
         for channel_name, ips in sh_x_ips_dict.items():
-            # ایجاد یک هش اختصاصی متصل به آیدی همان کانال برای کنترل تکراری‌ها
             ip_hash = f"SH_X_{channel_name}_" + "_".join(sorted(ips))
             if ip_hash not in history:
                 msg = "آی پی برنامه 🦁☀️\n\n"
@@ -326,7 +352,6 @@ def main():
                 print(f"Sent {len(ips)} Sh_X IPs from channel: {channel_name}")
                 time.sleep(DELAY_BETWEEN_MSGS)
 
-    # ================= UI حرفه‌ای V2Ray =================
     for i in range(0, len(valid_v2ray), V2RAY_CHUNK_SIZE):
         chunk = valid_v2ray[i:i + V2RAY_CHUNK_SIZE]
         
@@ -343,9 +368,9 @@ def main():
         msg += "</blockquote>\n\n"
         
         if ENABLE_PING_FILTER:
-            msg += "<b>💎 بهینه شده برای نت ملی</b>\n\n"
+            msg += "<b>💎 بهینه شده برای نت ملی (ایران)</b>\n\n"
         else:
-            msg += "<b>💎 V2Ray Servers (New Updates)</b>\n\n"
+            msg += "<b>💎 V2Ray Servers (Iran)</b>\n\n"
             
         msg += f"🛡 <b>Join:</b> @{CHANNEL_ID}\n"
         msg += "🌐 #v2ray #vless #vpn #config #کانفیگ\n"
@@ -357,7 +382,6 @@ def main():
             print(f"Sent {len(chunk)} V2ray configs. Waiting {DELAY_BETWEEN_MSGS} seconds...")
             time.sleep(DELAY_BETWEEN_MSGS)
 
-    # ================= UI حرفه‌ای پروکسی تلگرام =================
     if ENABLE_MTPROTO:
         for i in range(0, len(valid_mtproto), MTPROTO_CHUNK_SIZE):
             chunk = valid_mtproto[i:i + MTPROTO_CHUNK_SIZE]
