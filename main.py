@@ -401,11 +401,19 @@ def main():
     unique_v2ray = []
     unique_mtproto = []
 
+    # ================= فیلتر تکراری‌های عمیق (Deep Deduplication) =================
     for link in new_v2ray:
-        base = link.split('#')[0] if not link.startswith('vmess') else link
-        if base not in history:
+        host, port = extract_ip_port(link)
+        if host and port:
+            # ساخت کلید اختصاصی بر اساس آی‌پی و پورت
+            unique_key = f"{host}:{port}"
+        else:
+            # اگر دامین و پورت به درستی استخراج نشد، از کلینک خام به عنوان کلید استفاده می‌شود
+            unique_key = link.split('#')[0] if not link.startswith('vmess') else link
+            
+        if unique_key not in history:
             unique_v2ray.append(link)
-            history.add(base)
+            history.add(unique_key)
             
     for link in new_mtproto:
         if link not in history:
