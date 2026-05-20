@@ -140,6 +140,36 @@ def extract_ip_port(config):
         pass
     return None, None
 
+def is_internet_pro_config(config):
+    try:
+        host, port = extract_ip_port(config)
+        if not host: 
+            return False
+        
+        if not re.match(r'\b(?:\d{1,3}\.){3}\d{1,3}\b', host):
+            return False
+            
+        if config.startswith('vmess://'):
+            b64_str = config[8:]
+            b64_str += "=" * ((4 - len(b64_str) % 4) % 4)
+            data = json.loads(base64.b64decode(b64_str).decode('utf-8'))
+            tls = data.get('tls', '').lower()
+            if tls and tls != 'none':
+                return False 
+            return True
+            
+        elif config.startswith(('vless://', 'trojan://')):
+            parsed = urllib.parse.urlparse(config)
+            qs = urllib.parse.parse_qs(parsed.query)
+            sec = qs.get('security', [''])[0].lower()
+            if sec and sec != 'none':
+                return False 
+            return True
+            
+    except Exception:
+        pass
+    return False
+
 def check_ping(config):
     host, port = extract_ip_port(config)
     if not host or not port:
@@ -156,13 +186,57 @@ def check_ping(config):
 
 def filter_no_ping_configs(configs):
     selected = []
-    print(f"Checking {len(configs)} configs for NO-PING rule...")
+    print(f"Checking {len(configs)} configs for NO-PING rule (Standard Net)...")
     with concurrent.futures.ThreadPoolExecutor(max_workers=20) as executor:
         results = executor.map(lambda c: (c, check_ping(c)), configs)
         for config, has_ping in results:
             if not has_ping: 
                 selected.append(config)
     return selected
+
+def filter_pro_configs(configs):
+    """فیلتر اختصاصی کانفیگ‌های اینترنت پرو: دیتاسنتر معتبر + دارای پینگ موفق"""
+    selected_pro = []
+    print(f"Filtering {len(configs)} PRO configs for Datacenter and Active Ping...")
+    
+    # کلمات کلیدی دیتاسنترهای معتبر جهانی
+    valid_dcs = ['ovh', 'hetzner', 'digitalocean', 'linode', 'amazon', 'google', 'microsoft', 
+                 'azure', 'oracle', 'leaseweb', 'contabo', 'vultr', 'aruba', 'akamai', 'cloudflare', 'fastly']
+    
+    asn_db_path = 'GeoLite2-ASN.mmdb'
+    valid_asn_configs = []
+    
+    if os.path.exists(asn_db_path):
+        try:
+            with geoip2.database.Reader(asn_db_path) as reader:
+                for config in configs:
+                    host, port = extract_ip_port(config)
+                    if not host: continue
+                    
+                    try:
+                        response = reader.asn(host)
+                        org = response.autonomous_system_organization.lower()
+                        # اگر اسم دیتاسنتر در لیست معتبرها بود، انتخابش کن
+                        if any(dc in org for dc in valid_dcs):
+                            valid_asn_configs.append(config)
+                    except (geoip2.errors.AddressNotFoundError, Exception):
+                        pass
+        except Exception as e:
+            print(f"ASN Database Error: {e}")
+    else:
+        print("ASN DB not found! Skipping datacenter check.")
+        valid_asn_configs = configs
+
+    print(f"Found {len(valid_asn_configs)} PRO configs with Valid Datacenters. Checking Ping...")
+    
+    # برای اینترنت پرو، ما سروری رو میخوایم که پینگ بده (True) و زنده باشه
+    with concurrent.futures.ThreadPoolExecutor(max_workers=20) as executor:
+        results = executor.map(lambda c: (c, check_ping(c)), valid_asn_configs)
+        for config, has_ping in results:
+            if has_ping: 
+                selected_pro.append(config)
+                
+    return selected_pro
 
 def filter_iran_configs(configs):
     iran_configs = []
@@ -181,9 +255,7 @@ def filter_iran_configs(configs):
                     continue
                 
                 try:
-                    # بررسی آی‌پی بودن یا دامین بودن
                     if not re.match(r'\b(?:\d{1,3}\.){3}\d{1,3}\b', host):
-                        # اگر دامین است، به آی‌پی تبدیل کن (Resolve)
                         ip = socket.gethostbyname(host)
                     else:
                         ip = host
@@ -322,13 +394,26 @@ def main():
             unique_mtproto.append(link)
             history.add(link)
 
-    # 1. فیلتر کردن کانفیگ‌های v2ray و جدا کردن سرورهای ایران
-    valid_v2ray = filter_iran_configs(unique_v2ray)
+    # 1. تفکیک اولیه: اینترنت پرو از معمولی
+    raw_pro_v2ray = []
+    standard_v2ray = []
+    
+    for config in unique_v2ray:
+        if is_internet_pro_config(config):
+            raw_pro_v2ray.append(config)
+        else:
+            standard_v2ray.append(config)
 
-    # 2. تست پینگ روی مواردی که باقیمانده (ایران‌های v2ray و تمام پروکسی‌های تلگرام)
+    # 2. فیلتر پیشرفته کانفیگ‌های پرو (دیتاسنتر معتبر + پینگ موفق)
+    valid_pro_v2ray = filter_pro_configs(raw_pro_v2ray)
+
+    # 3. فیلتر کردن کانفیگ‌های معمولی (فقط ایران)
+    valid_standard_v2ray = filter_iran_configs(standard_v2ray)
+
+    # 4. تست پینگ (برای کانفیگ‌های معمولی ایران و پروکسی‌ها - پینگ ناموفق)
     if ENABLE_PING_FILTER:
-        print("Ping filter is ON. Filtering configs...")
-        valid_v2ray = filter_no_ping_configs(valid_v2ray)
+        print("Ping filter is ON. Filtering standard configs...")
+        valid_standard_v2ray = filter_no_ping_configs(valid_standard_v2ray)
         valid_mtproto = filter_no_ping_configs(unique_mtproto)
     else:
         print("Ping filter is OFF. Processing all new configs...")
@@ -336,6 +421,7 @@ def main():
 
     total_sent = 0
     
+    # ================= ارسال آی‌پی‌های ش.خ =================
     if ENABLE_SH_X_IP and sh_x_ips_dict:
         for channel_name, ips in sh_x_ips_dict.items():
             ip_hash = f"SH_X_{channel_name}_" + "_".join(sorted(ips))
@@ -352,8 +438,33 @@ def main():
                 print(f"Sent {len(ips)} Sh_X IPs from channel: {channel_name}")
                 time.sleep(DELAY_BETWEEN_MSGS)
 
-    for i in range(0, len(valid_v2ray), V2RAY_CHUNK_SIZE):
-        chunk = valid_v2ray[i:i + V2RAY_CHUNK_SIZE]
+    # ================= ارسال کانفیگ‌های اینترنت پرو =================
+    for i in range(0, len(valid_pro_v2ray), V2RAY_CHUNK_SIZE):
+        chunk = valid_pro_v2ray[i:i + V2RAY_CHUNK_SIZE]
+        
+        msg = "👨🏻‍💻 مخصوص اینترنت پرو\n\n"
+        msg += "<blockquote expandable><code>\n"
+        all_configs = ""
+        for link in chunk:
+            updated_link = update_remark(link, f"🚀@{CHANNEL_ID}")
+            escaped_link = html.escape(updated_link)
+            all_configs += f"{escaped_link}\n"
+        
+        msg += all_configs.strip()
+        msg += "\n</code>\n"
+        msg += "</blockquote>\n\n"
+        msg += f"📡 @{CHANNEL_ID}\n"
+        
+        send_to_telegram(msg)
+        total_sent += len(chunk)
+        
+        if i + V2RAY_CHUNK_SIZE < len(valid_pro_v2ray) or valid_standard_v2ray or (ENABLE_MTPROTO and valid_mtproto):
+            print(f"Sent {len(chunk)} PRO V2ray configs. Waiting {DELAY_BETWEEN_MSGS} seconds...")
+            time.sleep(DELAY_BETWEEN_MSGS)
+
+    # ================= ارسال کانفیگ‌های معمولی (ایران) =================
+    for i in range(0, len(valid_standard_v2ray), V2RAY_CHUNK_SIZE):
+        chunk = valid_standard_v2ray[i:i + V2RAY_CHUNK_SIZE]
         
         msg = "<blockquote expandable>"
         msg += "<code>\n"
@@ -378,10 +489,11 @@ def main():
         send_to_telegram(msg)
         total_sent += len(chunk)
         
-        if i + V2RAY_CHUNK_SIZE < len(valid_v2ray) or (ENABLE_MTPROTO and valid_mtproto):
-            print(f"Sent {len(chunk)} V2ray configs. Waiting {DELAY_BETWEEN_MSGS} seconds...")
+        if i + V2RAY_CHUNK_SIZE < len(valid_standard_v2ray) or (ENABLE_MTPROTO and valid_mtproto):
+            print(f"Sent {len(chunk)} Standard V2ray configs. Waiting {DELAY_BETWEEN_MSGS} seconds...")
             time.sleep(DELAY_BETWEEN_MSGS)
 
+    # ================= ارسال پروکسی‌های تلگرام =================
     if ENABLE_MTPROTO:
         for i in range(0, len(valid_mtproto), MTPROTO_CHUNK_SIZE):
             chunk = valid_mtproto[i:i + MTPROTO_CHUNK_SIZE]
