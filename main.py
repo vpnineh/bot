@@ -140,6 +140,28 @@ def extract_ip_port(config):
         pass
     return None, None
 
+def get_country_info(ip_or_host):
+    """آی‌پی را می‌گیرد و پرچم + مخفف کشور را به شکل پیوسته برمی‌گرداند"""
+    db_path = 'GeoLite2-Country.mmdb'
+    if not os.path.exists(db_path):
+        return ""
+    try:
+        if not re.match(r'\b(?:\d{1,3}\.){3}\d{1,3}\b', ip_or_host):
+            ip = socket.gethostbyname(ip_or_host)
+        else:
+            ip = ip_or_host
+            
+        with geoip2.database.Reader(db_path) as reader:
+            response = reader.country(ip)
+            iso = response.country.iso_code
+            if iso:
+                # تبدیل کد ISO به ایموجی پرچم (بدون فاصله اضافی برای شکیل ماندن لینک)
+                flag = chr(ord(iso[0]) + 127397) + chr(ord(iso[1]) + 127397)
+                return f"{flag}{iso}-"
+    except Exception:
+        pass
+    return ""
+
 def is_internet_pro_config(config):
     try:
         host, port = extract_ip_port(config)
@@ -195,11 +217,9 @@ def filter_no_ping_configs(configs):
     return selected
 
 def filter_pro_configs(configs):
-    """فیلتر اختصاصی کانفیگ‌های اینترنت پرو: دیتاسنتر معتبر + دارای پینگ موفق"""
     selected_pro = []
     print(f"Filtering {len(configs)} PRO configs for Datacenter and Active Ping...")
     
-    # کلمات کلیدی دیتاسنترهای معتبر جهانی
     valid_dcs = ['ovh', 'hetzner', 'digitalocean', 'linode', 'amazon', 'google', 'microsoft', 
                  'azure', 'oracle', 'leaseweb', 'contabo', 'vultr', 'aruba', 'akamai', 'cloudflare', 'fastly']
     
@@ -216,7 +236,6 @@ def filter_pro_configs(configs):
                     try:
                         response = reader.asn(host)
                         org = response.autonomous_system_organization.lower()
-                        # اگر اسم دیتاسنتر در لیست معتبرها بود، انتخابش کن
                         if any(dc in org for dc in valid_dcs):
                             valid_asn_configs.append(config)
                     except (geoip2.errors.AddressNotFoundError, Exception):
@@ -229,7 +248,6 @@ def filter_pro_configs(configs):
 
     print(f"Found {len(valid_asn_configs)} PRO configs with Valid Datacenters. Checking Ping...")
     
-    # برای اینترنت پرو، ما سروری رو میخوایم که پینگ بده (True) و زنده باشه
     with concurrent.futures.ThreadPoolExecutor(max_workers=20) as executor:
         results = executor.map(lambda c: (c, check_ping(c)), valid_asn_configs)
         for config, has_ping in results:
@@ -394,7 +412,6 @@ def main():
             unique_mtproto.append(link)
             history.add(link)
 
-    # 1. تفکیک اولیه: اینترنت پرو از معمولی
     raw_pro_v2ray = []
     standard_v2ray = []
     
@@ -404,13 +421,9 @@ def main():
         else:
             standard_v2ray.append(config)
 
-    # 2. فیلتر پیشرفته کانفیگ‌های پرو (دیتاسنتر معتبر + پینگ موفق)
     valid_pro_v2ray = filter_pro_configs(raw_pro_v2ray)
-
-    # 3. فیلتر کردن کانفیگ‌های معمولی (فقط ایران)
     valid_standard_v2ray = filter_iran_configs(standard_v2ray)
 
-    # 4. تست پینگ (برای کانفیگ‌های معمولی ایران و پروکسی‌ها - پینگ ناموفق)
     if ENABLE_PING_FILTER:
         print("Ping filter is ON. Filtering standard configs...")
         valid_standard_v2ray = filter_no_ping_configs(valid_standard_v2ray)
@@ -421,7 +434,6 @@ def main():
 
     total_sent = 0
     
-    # ================= ارسال آی‌پی‌های ش.خ =================
     if ENABLE_SH_X_IP and sh_x_ips_dict:
         for channel_name, ips in sh_x_ips_dict.items():
             ip_hash = f"SH_X_{channel_name}_" + "_".join(sorted(ips))
@@ -446,7 +458,12 @@ def main():
         msg += "<blockquote expandable><code>\n"
         all_configs = ""
         for link in chunk:
-            updated_link = update_remark(link, f"🚀@{CHANNEL_ID}")
+            host, port = extract_ip_port(link)
+            country_prefix = ""
+            if host:
+                country_prefix = get_country_info(host)
+                
+            updated_link = update_remark(link, f"{country_prefix}🚀@{CHANNEL_ID}")
             escaped_link = html.escape(updated_link)
             all_configs += f"{escaped_link}\n"
         
@@ -470,7 +487,12 @@ def main():
         msg += "<code>\n"
         all_configs = ""
         for link in chunk:
-            updated_link = update_remark(link, f"🚀@{CHANNEL_ID}")
+            host, port = extract_ip_port(link)
+            country_prefix = ""
+            if host:
+                country_prefix = get_country_info(host)
+
+            updated_link = update_remark(link, f"{country_prefix}🚀@{CHANNEL_ID}")
             escaped_link = html.escape(updated_link)
             all_configs += f"{escaped_link}\n"
         
