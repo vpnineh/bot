@@ -597,11 +597,11 @@ def main():
         current_char_count = 0
         
         if ENABLE_PING_FILTER:
-            bottom_text = "<b>💎 بهینه شده برای نت ملی (ایران)</b>\n\n"
+            bottom_text = "<b>⚙️ بهینه شده برای اینترنت ملی</b>\n\n"
         else:
             bottom_text = "<b>💎 V2Ray Servers (Iran)</b>\n\n"
             
-        bottom_text += f"🛡 <b>Join:</b> @{CHANNEL_ID}\n🌐 #v2ray #vless #vpn #config #کانفیگ\n"
+        bottom_text += f"✅ <b>Join:</b> @{CHANNEL_ID}\n🌐 #v2ray #vless #vpn #config #کانفیگ\n"
         
         base_msg = f"<blockquote expandable><code>\n</code>\n</blockquote>\n\n{bottom_text}"
         max_allowed_chars = MAX_TELEGRAM_MSG_CHARS - len(base_msg)
