@@ -68,20 +68,19 @@ def extract_ip_port(config):
     return None, None
 
 def get_deep_signature(config):
+    # اگر ورودی با SH_X_ شروع شود (مثل آی‌پی‌های تکی)، همان را برمی‌گرداند
     if config.startswith('SH_X_'):
         return config
         
     try:
         host, port = extract_ip_port(config)
         
-        # اگر نتوانست آی‌پی و پورت را پیدا کند، کل لینک (بدون ریمارک) را به عنوان شناسه در نظر می‌گیرد
         if not host or not port:
             return config.split('#')[0] if not config.startswith('vmess') else config
 
         protocol = config.split('://')[0] if '://' in config else 'proxy'
         sni_or_host = ""
 
-        # استخراج دقیق SNI یا Host از داخل کانفیگ
         if config.startswith('vmess://'):
             b64_str = config[8:]
             b64_str += "=" * ((4 - len(b64_str) % 4) % 4)
@@ -93,7 +92,6 @@ def get_deep_signature(config):
             qs = urllib.parse.parse_qs(parsed.query)
             sni_or_host = str(qs.get('sni', [''])[0] or qs.get('host', [''])[0]).strip()
 
-        # ساخت امضای نهایی با ترکیب پروتکل، آی‌پی، پورت و اس‌ان‌آی
         if sni_or_host:
             return f"{protocol}://{host}:{port}@{sni_or_host}"
         else:
@@ -108,7 +106,6 @@ def load_history():
         with open(HISTORY_FILE, 'r', encoding='utf-8') as f:
             for line in f.read().splitlines():
                 if not line.strip(): continue
-                # مهاجرت خودکار و خواندن فایل هیستوری بر اساس امضای عمیق
                 sig = get_deep_signature(line)
                 history[sig] = None
     return history
@@ -561,23 +558,37 @@ def main():
 
     total_sent = 0
     
+    # ================= تغییر اصلی: بررسی تک‌تک آی‌پی‌های ش.خ =================
     if ENABLE_SH_X_IP and sh_x_ips_dict:
         for channel_name, ips in sh_x_ips_dict.items():
-            ip_hash = "SH_X_" + "_".join(sorted(ips))
-            if ip_hash not in history:
+            new_ips = []
+            
+            # چک کردن هر آی‌پی به صورت جداگانه در فایل تاریخچه
+            for ip in ips:
+                ip_key = f"SH_X_{ip}" # اضافه کردن یک پیشوند برای جلوگیری از تداخل
+                if ip_key not in history:
+                    new_ips.append(ip)
+            
+            # اگر آی‌پی جدیدی وجود داشت، فقط همان جدیدها را ارسال کن
+            if new_ips:
                 msg = "آی پی برنامه 🦁☀️\n\n"
                 msg += "<blockquote expandable><code>\n"
-                for ip in ips:
+                for ip in new_ips:
                     msg += f"{ip}\n"
                 msg += "</code></blockquote>\n\n"
                 msg += f"⚙️ @{CHANNEL_ID}"
                 
                 send_to_telegram(msg)
-                history[ip_hash] = None
-                print(f"Sent {len(ips)} Sh_X IPs from channel: {channel_name}")
+                
+                # اضافه کردن آی‌پی‌های جدید به تاریخچه تا دفعه بعد ارسال نشوند
+                for ip in new_ips:
+                    ip_key = f"SH_X_{ip}"
+                    history[ip_key] = None
+                    
+                print(f"Sent {len(new_ips)} NEW Sh_X IPs from channel: {channel_name} (Skipped {len(ips) - len(new_ips)} duplicates)")
                 time.sleep(DELAY_BETWEEN_MSGS)
             else:
-                print(f"Skipped duplicate Sh_X IPs from channel: {channel_name}")
+                print(f"Skipped Sh_X IPs from channel: {channel_name} (All IPs were already sent)")
 
     # ================= ارسال کانفیگ‌های اینترنت پرو بر اساس حجم کاراکتر =================
     if ENABLE_INTERNET_PRO and valid_pro_v2ray:
