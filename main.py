@@ -258,7 +258,7 @@ def check_ping(config):
 def filter_no_ping_configs(configs):
     selected = []
     print(f"Checking {len(configs)} configs for NO-PING rule (Standard Net)...")
-    with concurrent.futures.ThreadPoolExecutor(max_workers=30) as executor:
+    with concurrent.futures.ThreadPoolExecutor(max_workers=60) as executor:
         results = executor.map(lambda c: (c, check_ping(c)), configs)
         for config, has_ping in results:
             if not has_ping: 
@@ -302,7 +302,7 @@ def filter_pro_configs(configs):
         except Exception:
             return False
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=30) as executor:
+    with concurrent.futures.ThreadPoolExecutor(max_workers=60) as executor:
         results = executor.map(lambda c: (c, is_valid_pro(c)), configs)
         for config, is_valid in results:
             if is_valid: 
@@ -344,7 +344,7 @@ def filter_iran_configs(configs):
             pass
         return False
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=30) as executor:
+    with concurrent.futures.ThreadPoolExecutor(max_workers=60) as executor:
         results = executor.map(lambda c: (c, check_is_iran(c)), configs)
         for config, is_ir in results:
             if is_ir:
