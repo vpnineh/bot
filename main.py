@@ -28,11 +28,17 @@ PING_TIMEOUT = 2.0
 
 BOT_TOKEN = os.environ.get('BOT_TOKEN')
 TARGET_CHANNEL = os.environ.get('TARGET_CHANNEL')
+
+# === تنظیمات جدید اضافه شده برای اکانت دوم ===
+GITHUB_TOKEN_DEST = os.environ.get('DEST_REPO_TOKEN') 
+DEST_REPO_OWNER = "vpnine1"
+DEST_REPO_NAME = "sub"
 # ===========================================
 
 HISTORY_FILE = 'history.txt'
 SOURCES_FILE = 'sources.txt'
 SH_X_SOURCES_FILE = 'x.txt'
+COUNTER_FILE = 'sub_counter.txt' # فایل جدید برای ذخیره شماره ساب
 
 def load_history():
     if os.path.exists(HISTORY_FILE):
@@ -43,6 +49,50 @@ def load_history():
 def save_history(history):
     with open(HISTORY_FILE, 'w', encoding='utf-8') as f:
         f.write('\n'.join(list(history)[-8000:]))
+
+# ================= توابع جدید اضافه شده برای ساب =================
+def load_sub_counter():
+    if os.path.exists(COUNTER_FILE):
+        with open(COUNTER_FILE, 'r') as f:
+            try:
+                return int(f.read().strip())
+            except Exception:
+                return 1
+    return 1
+
+def save_sub_counter(count):
+    with open(COUNTER_FILE, 'w') as f:
+        f.write(str(count))
+
+def upload_sub_to_github(filename, content_b64):
+    if not GITHUB_TOKEN_DEST:
+        print("Error: DEST_REPO_TOKEN is missing!")
+        return False
+        
+    url = f"https://api.github.com/repos/{DEST_REPO_OWNER}/{DEST_REPO_NAME}/contents/{filename}"
+    headers = {
+        "Authorization": f"token {GITHUB_TOKEN_DEST}",
+        "Accept": "application/vnd.github.v3+json"
+    }
+    
+    data = {
+        "message": f"Auto-add {filename} via API",
+        "content": content_b64,
+        "branch": "main" 
+    }
+    
+    response = requests.put(url, headers=headers, json=data)
+    
+    if response.status_code == 201:
+        print(f"✅ Successfully uploaded {filename} to GitHub.")
+        return True
+    elif response.status_code == 422:
+        print(f"⚠️ File {filename} already exists. Skipping upload.")
+        return True 
+    else:
+        print(f"❌ Failed to upload {filename}. Status: {response.status_code}")
+        return False
+# ================================================================
 
 def load_sources():
     channels = []
@@ -399,7 +449,8 @@ def fetch_raw_configs():
             
     return list(v2ray_links), list(mtproto_links), newest_sh_x_by_channel
 
-def send_to_telegram(text):
+# === تغییر: اضافه شدن پارامتر specific_sub_url به تابع ارسال ===
+def send_to_telegram(text, specific_sub_url=None):
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
     payload = {
         'chat_id': TARGET_CHANNEL,
@@ -407,6 +458,21 @@ def send_to_telegram(text):
         'parse_mode': 'HTML',
         'disable_web_page_preview': True
     }
+    
+    if specific_sub_url:
+        payload['reply_markup'] = {
+            "inline_keyboard": [
+                [
+                    {
+                        "text": "🔗 کپی لینک ساب کانفیگ",
+                        "copy_text": {
+                            "text": specific_sub_url
+                        }
+                    }
+                ]
+            ]
+        }
+        
     resp = requests.post(url, json=payload)
     if resp.status_code != 200:
         print(f"Telegram API Error: {resp.text}")
@@ -417,6 +483,8 @@ def main():
         return
 
     history = load_history()
+    sub_counter = load_sub_counter() # === تغییر: دریافت آخرین شماره ساب
+    
     new_v2ray, new_mtproto, sh_x_ips_dict = fetch_raw_configs()
     
     unique_v2ray = []
@@ -455,7 +523,6 @@ def main():
         valid_mtproto = unique_mtproto
 
     total_sent = 0
-    sub_links = [] # لیست ذخیره کانفیگ‌ها برای فایل سابسکریپشن
     
     if ENABLE_SH_X_IP and sh_x_ips_dict:
         for channel_name, ips in sh_x_ips_dict.items():
@@ -483,6 +550,8 @@ def main():
             msg = "👨🏻‍💻 مخصوص اینترنت پرو\n\n"
             msg += "<blockquote expandable><code>\n"
             all_configs = ""
+            chunk_sub_links = [] # === تغییر: آرایه مخصوص همین پست
+            
             for link in chunk:
                 host, port = extract_ip_port(link)
                 country_prefix = ""
@@ -492,14 +561,28 @@ def main():
                 updated_link = update_remark(link, f"{country_prefix}🚀@{CHANNEL_ID}")
                 escaped_link = html.escape(updated_link)
                 all_configs += f"{escaped_link}\n"
-                sub_links.append(updated_link) # اضافه کردن به لیست سابسکریپشن
+                chunk_sub_links.append(updated_link) 
             
             msg += all_configs.strip()
             msg += "\n</code>\n"
             msg += "</blockquote>\n\n"
             msg += f"📡 @{CHANNEL_ID}\n"
             
-            send_to_telegram(msg)
+            # === تغییر: پروسه تولید و آپلود مستقیم در گیت‌هاب ===
+            sub_filename = f"@VPNine1-sub{sub_counter}"
+            sub_url = f"https://raw.githubusercontent.com/vpnine1/sub/main/{sub_filename}"
+            sub_content = '\n'.join(chunk_sub_links)
+            sub_b64 = base64.b64encode(sub_content.encode('utf-8')).decode('utf-8')
+            
+            upload_success = upload_sub_to_github(sub_filename, sub_b64)
+            
+            if upload_success:
+                send_to_telegram(msg, specific_sub_url=sub_url)
+                sub_counter += 1
+            else:
+                print(f"GitHub upload failed for {sub_filename}. Sending post without sub button.")
+                send_to_telegram(msg, specific_sub_url=None)
+            
             total_sent += len(chunk)
             
             if i + V2RAY_CHUNK_SIZE < len(valid_pro_v2ray) or valid_standard_v2ray or (ENABLE_MTPROTO and valid_mtproto):
@@ -513,6 +596,8 @@ def main():
         msg = "<blockquote expandable>"
         msg += "<code>\n"
         all_configs = ""
+        chunk_sub_links = [] # === تغییر: آرایه مخصوص همین پست
+        
         for link in chunk:
             host, port = extract_ip_port(link)
             country_prefix = ""
@@ -522,7 +607,7 @@ def main():
             updated_link = update_remark(link, f"{country_prefix}🚀@{CHANNEL_ID}")
             escaped_link = html.escape(updated_link)
             all_configs += f"{escaped_link}\n"
-            sub_links.append(updated_link) # اضافه کردن به لیست سابسکریپشن
+            chunk_sub_links.append(updated_link) 
         
         msg += all_configs.strip()
         msg += "\n</code>\n"
@@ -536,7 +621,21 @@ def main():
         msg += f"🛡 <b>Join:</b> @{CHANNEL_ID}\n"
         msg += "🌐 #v2ray #vless #vpn #config #کانفیگ\n"
         
-        send_to_telegram(msg)
+        # === تغییر: پروسه تولید و آپلود مستقیم در گیت‌هاب ===
+        sub_filename = f"@VPNine1-sub{sub_counter}"
+        sub_url = f"https://raw.githubusercontent.com/vpnine1/sub/main/{sub_filename}"
+        sub_content = '\n'.join(chunk_sub_links)
+        sub_b64 = base64.b64encode(sub_content.encode('utf-8')).decode('utf-8')
+        
+        upload_success = upload_sub_to_github(sub_filename, sub_b64)
+        
+        if upload_success:
+            send_to_telegram(msg, specific_sub_url=sub_url)
+            sub_counter += 1
+        else:
+            print(f"GitHub upload failed for {sub_filename}. Sending post without sub button.")
+            send_to_telegram(msg, specific_sub_url=None)
+            
         total_sent += len(chunk)
         
         if i + V2RAY_CHUNK_SIZE < len(valid_standard_v2ray) or (ENABLE_MTPROTO and valid_mtproto):
@@ -567,15 +666,9 @@ def main():
                 print(f"Sent {len(chunk)} MTProto configs. Waiting {DELAY_BETWEEN_MSGS} seconds...")
                 time.sleep(DELAY_BETWEEN_MSGS)
 
-    # ================= ساخت و ذخیره فایل سابسکریپشن =================
-    if sub_links:
-        os.makedirs('sub', exist_ok=True)
-        sub_content = '\n'.join(sub_links)
-        sub_b64 = base64.b64encode(sub_content.encode('utf-8')).decode('utf-8')
-        with open('sub/sub.txt', 'w', encoding='utf-8') as f:
-            f.write(sub_b64)
-        print(f"Saved {len(sub_links)} configs to subscription file (sub/sub.txt).")
-
+    # === تغییر: کدهای قبلی که کل ساب‌لینک‌ها رو تو پوشه محلی ذخیره می‌کرد حذف شد ===
+    
+    save_sub_counter(sub_counter) # === تغییر: ذخیره آخرین شماره ساب در پایان اجرا
     save_history(history)
     print(f"Process finished. Successfully sent {total_sent} configs.")
 
