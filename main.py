@@ -12,25 +12,25 @@ from bs4 import BeautifulSoup
 import geoip2.database
 
 # ================= تنظیمات =================
-CHANNEL_ID = "VPNine1" 
-V2RAY_CHUNK_SIZE = 10    
-MTPROTO_CHUNK_SIZE = 10  
+CHANNEL_ID = "VPNine1"
+MAX_TELEGRAM_MSG_CHARS = 3800  # محدودیت کاراکتر برای هر پست (کمی کمتر از 4096 برای اطمینان)
+MTPROTO_CHUNK_SIZE = 10
 DELAY_BETWEEN_MSGS = 10
 
 # تنظیمات کنترل ارسال
 ENABLE_INTERNET_PRO = False   # True = پیدا کردن و ارسال کانفیگ‌های اینترنت پرو | False = خاموش
-ENABLE_MTPROTO = False        
-ENABLE_SH_X_IP = True        
+ENABLE_MTPROTO = False
+ENABLE_SH_X_IP = True
 
 # تنظیمات مربوط به فیلتر پینگ (ایران)
-ENABLE_PING_FILTER = True 
-PING_TIMEOUT = 2.0       
+ENABLE_PING_FILTER = True
+PING_TIMEOUT = 2.0
 
 BOT_TOKEN = os.environ.get('BOT_TOKEN')
 TARGET_CHANNEL = os.environ.get('TARGET_CHANNEL')
 
-# === تنظیمات جدید اضافه شده برای اکانت دوم ===
-GITHUB_TOKEN_DEST = os.environ.get('DEST_REPO_TOKEN') 
+# === تنظیمات مربوط به اکانت دوم (گیت‌هاب) ===
+GITHUB_TOKEN_DEST = os.environ.get('DEST_REPO_TOKEN')
 DEST_REPO_OWNER = "vpnine1"
 DEST_REPO_NAME = "sub"
 # ===========================================
@@ -38,7 +38,7 @@ DEST_REPO_NAME = "sub"
 HISTORY_FILE = 'history.txt'
 SOURCES_FILE = 'sources.txt'
 SH_X_SOURCES_FILE = 'x.txt'
-COUNTER_FILE = 'sub_counter.txt' # فایل جدید برای ذخیره شماره ساب
+COUNTER_FILE = 'sub_counter.txt'
 
 def load_history():
     if os.path.exists(HISTORY_FILE):
@@ -50,7 +50,6 @@ def save_history(history):
     with open(HISTORY_FILE, 'w', encoding='utf-8') as f:
         f.write('\n'.join(list(history)[-8000:]))
 
-# ================= توابع جدید اضافه شده برای ساب =================
 def load_sub_counter():
     if os.path.exists(COUNTER_FILE):
         with open(COUNTER_FILE, 'r') as f:
@@ -92,7 +91,6 @@ def upload_sub_to_github(filename, content_b64):
     else:
         print(f"❌ Failed to upload {filename}. Status: {response.status_code}")
         return False
-# ================================================================
 
 def load_sources():
     channels = []
@@ -394,11 +392,8 @@ def fetch_raw_configs():
                     text = msg_text_div.get_text(separator=' ')
                     text_lower = text.lower()
                     
-                    # ==============================================================
-                    # نادیده گرفتن پست‌هایی که شامل کلمات مربوط به سایفون یا ترکیبی هستند
                     if any(keyword in text_lower for keyword in ['psiphon', 'سایفون', 'ترکیبی']):
                         continue
-                    # ==============================================================
                     
                     if channel in channels:
                         for c in re.findall(pattern_v2ray, text): v2ray_links.add(c)
@@ -449,7 +444,6 @@ def fetch_raw_configs():
             
     return list(v2ray_links), list(mtproto_links), newest_sh_x_by_channel
 
-# === تغییر: اضافه شدن پارامتر specific_sub_url به تابع ارسال ===
 def send_to_telegram(text, specific_sub_url=None):
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
     payload = {
@@ -483,14 +477,13 @@ def main():
         return
 
     history = load_history()
-    sub_counter = load_sub_counter() # === تغییر: دریافت آخرین شماره ساب
+    sub_counter = load_sub_counter() 
     
     new_v2ray, new_mtproto, sh_x_ips_dict = fetch_raw_configs()
     
     unique_v2ray = []
     unique_mtproto = []
 
-    # ================= فیلتر تکراری بر اساس متد قبلی و پایدار =================
     for link in new_v2ray:
         base = link.split('#')[0] if not link.startswith('vmess') else link
         if base not in history:
@@ -542,105 +535,122 @@ def main():
             else:
                 print(f"Skipped duplicate Sh_X IPs from channel: {channel_name}")
 
-    # ================= ارسال کانفیگ‌های اینترنت پرو =================
-    if ENABLE_INTERNET_PRO:
-        for i in range(0, len(valid_pro_v2ray), V2RAY_CHUNK_SIZE):
-            chunk = valid_pro_v2ray[i:i + V2RAY_CHUNK_SIZE]
-            
-            msg = "👨🏻‍💻 مخصوص اینترنت پرو\n\n"
-            msg += "<blockquote expandable><code>\n"
-            all_configs = ""
-            chunk_sub_links = [] # === تغییر: آرایه مخصوص همین پست
-            
-            for link in chunk:
-                host, port = extract_ip_port(link)
-                country_prefix = ""
-                if host:
-                    country_prefix = get_country_info(host)
-                    
-                updated_link = update_remark(link, f"{country_prefix}🚀@{CHANNEL_ID}")
-                escaped_link = html.escape(updated_link)
-                all_configs += f"{escaped_link}\n"
-                chunk_sub_links.append(updated_link) 
-            
-            msg += all_configs.strip()
-            msg += "\n</code>\n"
-            msg += "</blockquote>\n\n"
+    # ================= ارسال کانفیگ‌های اینترنت پرو بر اساس حجم کاراکتر =================
+    if ENABLE_INTERNET_PRO and valid_pro_v2ray:
+        chunk = []
+        chunk_sub_links = []
+        current_char_count = 0
+        
+        base_msg = f"👨🏻‍💻 مخصوص اینترنت پرو\n\n<blockquote expandable><code>\n</code>\n</blockquote>\n\n📡 @{CHANNEL_ID}\n"
+        max_allowed_chars = MAX_TELEGRAM_MSG_CHARS - len(base_msg)
+        
+        def send_pro_batch(batch, sub_links):
+            nonlocal sub_counter, total_sent
+            msg = "👨🏻‍💻 مخصوص اینترنت پرو\n\n<blockquote expandable><code>\n"
+            msg += "\n".join(batch)
+            msg += "\n</code>\n</blockquote>\n\n"
             msg += f"📡 @{CHANNEL_ID}\n"
             
-            # === تغییر: پروسه تولید و آپلود مستقیم در گیت‌هاب ===
             sub_filename = f"@VPNine1-sub{sub_counter}"
-            sub_url = f"https://raw.githubusercontent.com/vpnine1/sub/main/{sub_filename}"
-            sub_content = '\n'.join(chunk_sub_links)
+            # اضافه شدن نام فایل به عنوان ریمارک به انتهای لینک
+            sub_url = f"https://raw.githubusercontent.com/vpnine1/sub/main/{sub_filename}#{sub_filename}"
+            sub_content = '\n'.join(sub_links)
             sub_b64 = base64.b64encode(sub_content.encode('utf-8')).decode('utf-8')
             
             upload_success = upload_sub_to_github(sub_filename, sub_b64)
-            
             if upload_success:
                 send_to_telegram(msg, specific_sub_url=sub_url)
                 sub_counter += 1
             else:
-                print(f"GitHub upload failed for {sub_filename}. Sending post without sub button.")
+                print(f"GitHub upload failed for {sub_filename}. Sending without sub button.")
                 send_to_telegram(msg, specific_sub_url=None)
             
-            total_sent += len(chunk)
-            
-            if i + V2RAY_CHUNK_SIZE < len(valid_pro_v2ray) or valid_standard_v2ray or (ENABLE_MTPROTO and valid_mtproto):
-                print(f"Sent {len(chunk)} PRO V2ray configs. Waiting {DELAY_BETWEEN_MSGS} seconds...")
-                time.sleep(DELAY_BETWEEN_MSGS)
+            total_sent += len(batch)
+            print(f"Sent {len(batch)} PRO V2ray configs. Waiting {DELAY_BETWEEN_MSGS} seconds...")
+            time.sleep(DELAY_BETWEEN_MSGS)
 
-    # ================= ارسال کانفیگ‌های معمولی (ایران) =================
-    for i in range(0, len(valid_standard_v2ray), V2RAY_CHUNK_SIZE):
-        chunk = valid_standard_v2ray[i:i + V2RAY_CHUNK_SIZE]
-        
-        msg = "<blockquote expandable>"
-        msg += "<code>\n"
-        all_configs = ""
-        chunk_sub_links = [] # === تغییر: آرایه مخصوص همین پست
-        
-        for link in chunk:
+        for link in valid_pro_v2ray:
             host, port = extract_ip_port(link)
-            country_prefix = ""
-            if host:
-                country_prefix = get_country_info(host)
-
+            country_prefix = get_country_info(host) if host else ""
             updated_link = update_remark(link, f"{country_prefix}🚀@{CHANNEL_ID}")
             escaped_link = html.escape(updated_link)
-            all_configs += f"{escaped_link}\n"
-            chunk_sub_links.append(updated_link) 
-        
-        msg += all_configs.strip()
-        msg += "\n</code>\n"
-        msg += "</blockquote>\n\n"
+            
+            line_len = len(escaped_link) + 1 # +1 برای اسپیس خط بعد
+            
+            if current_char_count + line_len > max_allowed_chars and chunk:
+                send_pro_batch(chunk, chunk_sub_links)
+                chunk = []
+                chunk_sub_links = []
+                current_char_count = 0
+                
+            chunk.append(escaped_link)
+            chunk_sub_links.append(updated_link)
+            current_char_count += line_len
+            
+        if chunk:
+            send_pro_batch(chunk, chunk_sub_links)
+
+    # ================= ارسال کانفیگ‌های معمولی (ایران) بر اساس حجم کاراکتر =================
+    if valid_standard_v2ray:
+        chunk = []
+        chunk_sub_links = []
+        current_char_count = 0
         
         if ENABLE_PING_FILTER:
-            msg += "<b>💎 بهینه شده برای نت ملی (ایران)</b>\n\n"
+            bottom_text = "<b>💎 بهینه شده برای نت ملی (ایران)</b>\n\n"
         else:
-            msg += "<b>💎 V2Ray Servers (Iran)</b>\n\n"
+            bottom_text = "<b>💎 V2Ray Servers (Iran)</b>\n\n"
             
-        msg += f"🛡 <b>Join:</b> @{CHANNEL_ID}\n"
-        msg += "🌐 #v2ray #vless #vpn #config #کانفیگ\n"
+        bottom_text += f"🛡 <b>Join:</b> @{CHANNEL_ID}\n🌐 #v2ray #vless #vpn #config #کانفیگ\n"
         
-        # === تغییر: پروسه تولید و آپلود مستقیم در گیت‌هاب ===
-        sub_filename = f"@VPNine1-sub{sub_counter}"
-        sub_url = f"https://raw.githubusercontent.com/vpnine1/sub/main/{sub_filename}"
-        sub_content = '\n'.join(chunk_sub_links)
-        sub_b64 = base64.b64encode(sub_content.encode('utf-8')).decode('utf-8')
+        base_msg = f"<blockquote expandable><code>\n</code>\n</blockquote>\n\n{bottom_text}"
+        max_allowed_chars = MAX_TELEGRAM_MSG_CHARS - len(base_msg)
         
-        upload_success = upload_sub_to_github(sub_filename, sub_b64)
-        
-        if upload_success:
-            send_to_telegram(msg, specific_sub_url=sub_url)
-            sub_counter += 1
-        else:
-            print(f"GitHub upload failed for {sub_filename}. Sending post without sub button.")
-            send_to_telegram(msg, specific_sub_url=None)
+        def send_std_batch(batch, sub_links):
+            nonlocal sub_counter, total_sent
+            msg = "<blockquote expandable><code>\n"
+            msg += "\n".join(batch)
+            msg += "\n</code>\n</blockquote>\n\n"
+            msg += bottom_text
             
-        total_sent += len(chunk)
-        
-        if i + V2RAY_CHUNK_SIZE < len(valid_standard_v2ray) or (ENABLE_MTPROTO and valid_mtproto):
-            print(f"Sent {len(chunk)} Standard V2ray configs. Waiting {DELAY_BETWEEN_MSGS} seconds...")
+            sub_filename = f"@VPNine1-sub{sub_counter}"
+            # اضافه شدن نام فایل به عنوان ریمارک به انتهای لینک
+            sub_url = f"https://raw.githubusercontent.com/vpnine1/sub/main/{sub_filename}#{sub_filename}"
+            sub_content = '\n'.join(sub_links)
+            sub_b64 = base64.b64encode(sub_content.encode('utf-8')).decode('utf-8')
+            
+            upload_success = upload_sub_to_github(sub_filename, sub_b64)
+            if upload_success:
+                send_to_telegram(msg, specific_sub_url=sub_url)
+                sub_counter += 1
+            else:
+                print(f"GitHub upload failed for {sub_filename}. Sending without sub button.")
+                send_to_telegram(msg, specific_sub_url=None)
+                
+            total_sent += len(batch)
+            print(f"Sent {len(batch)} Standard V2ray configs. Waiting {DELAY_BETWEEN_MSGS} seconds...")
             time.sleep(DELAY_BETWEEN_MSGS)
+
+        for link in valid_standard_v2ray:
+            host, port = extract_ip_port(link)
+            country_prefix = get_country_info(host) if host else ""
+            updated_link = update_remark(link, f"{country_prefix}🚀@{CHANNEL_ID}")
+            escaped_link = html.escape(updated_link)
+            
+            line_len = len(escaped_link) + 1 
+            
+            if current_char_count + line_len > max_allowed_chars and chunk:
+                send_std_batch(chunk, chunk_sub_links)
+                chunk = []
+                chunk_sub_links = []
+                current_char_count = 0
+                
+            chunk.append(escaped_link)
+            chunk_sub_links.append(updated_link)
+            current_char_count += line_len
+            
+        if chunk:
+            send_std_batch(chunk, chunk_sub_links)
 
     # ================= ارسال پروکسی‌های تلگرام =================
     if ENABLE_MTPROTO:
@@ -665,10 +675,8 @@ def main():
             if i + MTPROTO_CHUNK_SIZE < len(valid_mtproto):
                 print(f"Sent {len(chunk)} MTProto configs. Waiting {DELAY_BETWEEN_MSGS} seconds...")
                 time.sleep(DELAY_BETWEEN_MSGS)
-
-    # === تغییر: کدهای قبلی که کل ساب‌لینک‌ها رو تو پوشه محلی ذخیره می‌کرد حذف شد ===
     
-    save_sub_counter(sub_counter) # === تغییر: ذخیره آخرین شماره ساب در پایان اجرا
+    save_sub_counter(sub_counter)
     save_history(history)
     print(f"Process finished. Successfully sent {total_sent} configs.")
 
