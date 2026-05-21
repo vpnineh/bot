@@ -13,12 +13,12 @@ import geoip2.database
 
 # ================= تنظیمات =================
 CHANNEL_ID = "VPNine1"
-MAX_TELEGRAM_MSG_CHARS = 3800  # محدودیت کاراکتر برای هر پست (کمی کمتر از 4096 برای اطمینان)
+MAX_TELEGRAM_MSG_CHARS = 3800  # محدودیت کاراکتر برای هر پست
 MTPROTO_CHUNK_SIZE = 10
 DELAY_BETWEEN_MSGS = 10
 
 # تنظیمات کنترل ارسال
-ENABLE_INTERNET_PRO = False   # True = پیدا کردن و ارسال کانفیگ‌های اینترنت پرو | False = خاموش
+ENABLE_INTERNET_PRO = False   
 ENABLE_MTPROTO = False
 ENABLE_SH_X_IP = True
 
@@ -40,15 +40,83 @@ SOURCES_FILE = 'sources.txt'
 SH_X_SOURCES_FILE = 'x.txt'
 COUNTER_FILE = 'sub_counter.txt'
 
+# ================= توابع حذف تکرار عمیق (Deep Deduplication) =================
+def extract_ip_port(config):
+    try:
+        if config.startswith('vmess://'):
+            b64_str = config[8:]
+            b64_str += "=" * ((4 - len(b64_str) % 4) % 4)
+            data = json.loads(base64.b64decode(b64_str).decode('utf-8'))
+            return data.get('add'), int(data.get('port'))
+        
+        elif config.startswith(('vless://', 'trojan://', 'ss://', 'ssr://', 'tuic://', 'hysteria2://')):
+            parsed = urllib.parse.urlparse(config)
+            netloc = parsed.netloc
+            if '@' in netloc:
+                netloc = netloc.split('@')[1]
+            if ':' in netloc:
+                host, port = netloc.split(':')
+                return host, int(port)
+                
+        elif config.startswith(('http', 'tg')):
+            parsed = urllib.parse.urlparse(config)
+            qs = urllib.parse.parse_qs(parsed.query)
+            if 'server' in qs and 'port' in qs:
+                return qs['server'][0], int(qs['port'][0])
+    except Exception:
+        pass
+    return None, None
+
+def get_deep_signature(config):
+    if config.startswith('SH_X_'):
+        return config
+        
+    try:
+        host, port = extract_ip_port(config)
+        
+        # اگر نتوانست آی‌پی و پورت را پیدا کند، کل لینک (بدون ریمارک) را به عنوان شناسه در نظر می‌گیرد
+        if not host or not port:
+            return config.split('#')[0] if not config.startswith('vmess') else config
+
+        protocol = config.split('://')[0] if '://' in config else 'proxy'
+        sni_or_host = ""
+
+        # استخراج دقیق SNI یا Host از داخل کانفیگ
+        if config.startswith('vmess://'):
+            b64_str = config[8:]
+            b64_str += "=" * ((4 - len(b64_str) % 4) % 4)
+            data = json.loads(base64.b64decode(b64_str).decode('utf-8'))
+            sni_or_host = str(data.get('sni', '') or data.get('host', '')).strip()
+            
+        elif config.startswith(('vless://', 'trojan://')):
+            parsed = urllib.parse.urlparse(config)
+            qs = urllib.parse.parse_qs(parsed.query)
+            sni_or_host = str(qs.get('sni', [''])[0] or qs.get('host', [''])[0]).strip()
+
+        # ساخت امضای نهایی با ترکیب پروتکل، آی‌پی، پورت و اس‌ان‌آی
+        if sni_or_host:
+            return f"{protocol}://{host}:{port}@{sni_or_host}"
+        else:
+            return f"{protocol}://{host}:{port}"
+            
+    except Exception:
+        return config.split('#')[0] if not config.startswith('vmess') else config
+
 def load_history():
+    history = {}
     if os.path.exists(HISTORY_FILE):
         with open(HISTORY_FILE, 'r', encoding='utf-8') as f:
-            return set(f.read().splitlines())
-    return set()
+            for line in f.read().splitlines():
+                if not line.strip(): continue
+                # مهاجرت خودکار و خواندن فایل هیستوری بر اساس امضای عمیق
+                sig = get_deep_signature(line)
+                history[sig] = None
+    return history
 
 def save_history(history):
     with open(HISTORY_FILE, 'w', encoding='utf-8') as f:
-        f.write('\n'.join(list(history)[-8000:]))
+        f.write('\n'.join(list(history.keys())[-8000:]))
+# ==============================================================================
 
 def load_sub_counter():
     if os.path.exists(COUNTER_FILE):
@@ -162,32 +230,6 @@ def update_remark(config, remark):
     else:
         if '#' in config: config = config.split('#')[0]
         return f"{config.rstrip(')')}#{remark}"
-
-def extract_ip_port(config):
-    try:
-        if config.startswith('vmess://'):
-            b64_str = config[8:]
-            b64_str += "=" * ((4 - len(b64_str) % 4) % 4)
-            data = json.loads(base64.b64decode(b64_str).decode('utf-8'))
-            return data.get('add'), int(data.get('port'))
-        
-        elif config.startswith(('vless://', 'trojan://', 'ss://', 'ssr://', 'tuic://', 'hysteria2://')):
-            parsed = urllib.parse.urlparse(config)
-            netloc = parsed.netloc
-            if '@' in netloc:
-                netloc = netloc.split('@')[1]
-            if ':' in netloc:
-                host, port = netloc.split(':')
-                return host, int(port)
-                
-        elif config.startswith(('http', 'tg')):
-            parsed = urllib.parse.urlparse(config)
-            qs = urllib.parse.parse_qs(parsed.query)
-            if 'server' in qs and 'port' in qs:
-                return qs['server'][0], int(qs['port'][0])
-    except Exception:
-        pass
-    return None, None
 
 def get_country_info(ip_or_host):
     db_path = 'GeoLite2-Country.mmdb'
@@ -484,16 +526,18 @@ def main():
     unique_v2ray = []
     unique_mtproto = []
 
+    # ================= اعمال قانون حذف تکرار عمیق =================
     for link in new_v2ray:
-        base = link.split('#')[0] if not link.startswith('vmess') else link
-        if base not in history:
+        sig = get_deep_signature(link)
+        if sig not in history:
             unique_v2ray.append(link)
-            history.add(base)
+            history[sig] = None
             
     for link in new_mtproto:
-        if link not in history:
+        sig = get_deep_signature(link)
+        if sig not in history:
             unique_mtproto.append(link)
-            history.add(link)
+            history[sig] = None
 
     raw_pro_v2ray = []
     standard_v2ray = []
@@ -529,7 +573,7 @@ def main():
                 msg += f"⚙️ @{CHANNEL_ID}"
                 
                 send_to_telegram(msg)
-                history.add(ip_hash)
+                history[ip_hash] = None
                 print(f"Sent {len(ips)} Sh_X IPs from channel: {channel_name}")
                 time.sleep(DELAY_BETWEEN_MSGS)
             else:
@@ -552,7 +596,6 @@ def main():
             msg += f"📡 @{CHANNEL_ID}\n"
             
             sub_filename = f"@VPNine1-sub{sub_counter}"
-            # اضافه شدن نام فایل به عنوان ریمارک به انتهای لینک
             sub_url = f"https://raw.githubusercontent.com/vpnine1/sub/main/{sub_filename}#{sub_filename}"
             sub_content = '\n'.join(sub_links)
             sub_b64 = base64.b64encode(sub_content.encode('utf-8')).decode('utf-8')
@@ -575,7 +618,7 @@ def main():
             updated_link = update_remark(link, f"{country_prefix}🚀@{CHANNEL_ID}")
             escaped_link = html.escape(updated_link)
             
-            line_len = len(escaped_link) + 1 # +1 برای اسپیس خط بعد
+            line_len = len(escaped_link) + 1 
             
             if current_char_count + line_len > max_allowed_chars and chunk:
                 send_pro_batch(chunk, chunk_sub_links)
@@ -597,7 +640,7 @@ def main():
         current_char_count = 0
         
         if ENABLE_PING_FILTER:
-            bottom_text = "<b>⚙️ بهینه شده برای اینترنت ملی</b>\n\n"
+            bottom_text = "<b>⚙️ بهینه شده برای نت ملی (بدون پینگ)</b>\n\n"
         else:
             bottom_text = "<b>💎 V2Ray Servers (Iran)</b>\n\n"
             
@@ -614,7 +657,6 @@ def main():
             msg += bottom_text
             
             sub_filename = f"@VPNine1-sub{sub_counter}"
-            # اضافه شدن نام فایل به عنوان ریمارک به انتهای لینک
             sub_url = f"https://raw.githubusercontent.com/vpnine1/sub/main/{sub_filename}#{sub_filename}"
             sub_content = '\n'.join(sub_links)
             sub_b64 = base64.b64encode(sub_content.encode('utf-8')).decode('utf-8')
