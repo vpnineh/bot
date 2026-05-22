@@ -510,7 +510,7 @@ def send_to_telegram(text, specific_sub_url=None, ips_to_copy=None):
             "inline_keyboard": [
                 [
                     {
-                        "text": "📋 کپی همه آی‌پی‌ها در کلیپ‌بورد",
+                        "text": "📋 کپی آی‌پی‌ها در کلیپ‌بورد",
                         "copy_text": {
                             "text": ips_to_copy
                         }
@@ -669,7 +669,7 @@ def main():
         current_char_count = 0
         
         if ENABLE_PING_FILTER:
-            bottom_text = "<b>⚙️ بهینه شده برای نت ملی (بدون پینگ)</b>\n\n"
+            bottom_text = "<b>⚙️ اختصاصی برای اینترنت ملی</b>\n\n"
         else:
             bottom_text = "<b>💎 V2Ray Servers (Iran)</b>\n\n"
             
