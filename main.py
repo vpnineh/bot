@@ -19,14 +19,13 @@ MTPROTO_CHUNK_SIZE = 10
 DELAY_BETWEEN_MSGS = 10
 
 # 🔴 حالت بی‌صدا (برای هماهنگ‌سازی دیتابیس بدون ارسال پیام)
-SILENT_MODE = False  # بعد از یک بار اجرای موفق، این را به False تغییر دهید
+SILENT_MODE = False  
 
-# تنظیمات کنترل ارسال
+# ================= کلیدهای مدیریت آپشن‌ها =================
 ENABLE_INTERNET_PRO = False   
-ENABLE_MTPROTO = False
-ENABLE_SH_X_IP = True
-
-# تنظیمات مربوط به فیلتر پینگ (ایران)
+ENABLE_MTPROTO = True         
+ENABLE_SH_X_IP = True         
+ENABLE_PSIPHON = True         
 ENABLE_PING_FILTER = True
 PING_TIMEOUT = 2.0
 
@@ -44,9 +43,34 @@ SOURCES_FILE = 'sources.txt'
 SH_X_SOURCES_FILE = 'x.txt'
 COUNTER_FILE = 'sub_counter.txt'
 
-# اگر روی حالت بی‌صدا هستیم، تاخیرها را صفر می‌کنیم تا سریع تمام شود
 if SILENT_MODE:
     DELAY_BETWEEN_MSGS = 0
+
+# ================= تابع فیلتر آی‌پی‌های مزاحم و DNS =================
+def is_valid_public_ip(ip):
+    dns_ips = {
+        "8.8.8.8", "8.8.4.4", "1.1.1.1", "1.0.0.1", "9.9.9.9", 
+        "149.112.112.112", "208.67.222.222", "208.67.220.220", 
+        "4.2.2.1", "4.2.2.2", "4.2.2.3", "4.2.2.4", "4.2.2.5", "4.2.2.6", 
+        "77.88.8.8", "77.88.8.1", "114.114.114.114", "8.26.56.26", 
+        "8.20.247.20", "94.140.14.14", "94.140.15.15"
+    }
+    
+    if ip in dns_ips:
+        return False
+        
+    parts = ip.split('.')
+    if len(parts) != 4: return False
+    
+    try:
+        p1, p2 = int(parts[0]), int(parts[1])
+        if p1 in [0, 10, 127] or p1 >= 224: return False 
+        if p1 == 172 and 16 <= p2 <= 31: return False    
+        if p1 == 192 and p2 == 168: return False         
+    except:
+        return False
+        
+    return True
 
 def extract_ip_port(config):
     try:
@@ -116,8 +140,7 @@ def save_sub_counter(count):
         f.write(str(count))
 
 def upload_sub_to_github(filename, content_b64):
-    if SILENT_MODE:
-        return True # در حالت بی‌صدا نیازی به آپلود فایل ساب نیست
+    if SILENT_MODE: return True 
         
     if not GITHUB_TOKEN_DEST:
         print("Error: DEST_REPO_TOKEN is missing!")
@@ -141,66 +164,41 @@ def upload_sub_to_github(filename, content_b64):
         print(f"✅ Successfully uploaded {filename} to GitHub.")
         return True
     elif response.status_code == 422:
-        print(f"⚠️ File {filename} already exists. Skipping upload.")
         return True 
     else:
-        print(f"❌ Failed to upload {filename}. Status: {response.status_code}")
         return False
 
-def load_sources():
-    channels = []
-    subs = []
-    
-    if not os.path.exists(SOURCES_FILE):
-        with open(SOURCES_FILE, 'w', encoding='utf-8') as f:
-            f.write("# لینک‌های ساب و آیدی کانال‌ها را اینجا قرار دهید\n")
-            f.write("AR14N24B\n")
-            f.write("oneclickvpnkeys\n")
-            f.write("persianvpnhub\n")
-            f.write("filembad\n")
-            f.write("moftconfig\n")
-            f.write("v2ray_configs_pool\n")
-    
-    with open(SOURCES_FILE, 'r', encoding='utf-8') as f:
+def load_file_lines(filepath, default_lines=[]):
+    lines = []
+    if not os.path.exists(filepath):
+        with open(filepath, 'w', encoding='utf-8') as f:
+            f.write("# لطفاً آیدی کانال‌ها را اینجا قرار دهید\n")
+            for d in default_lines: f.write(f"{d}\n")
+            
+    with open(filepath, 'r', encoding='utf-8') as f:
         for line in f:
             line = line.strip()
-            if not line or line.startswith('#'):
-                continue
-            
+            if not line or line.startswith('#'): continue
             if line.startswith('http://') or line.startswith('https://'):
                 if 't.me/' in line:
                     ch = line.split('t.me/')[-1].split('/')[0].replace('s', '').replace('+', '')
-                    if ch: channels.append(ch)
+                    if ch: lines.append(ch)
                 else:
-                    subs.append(line)
+                    lines.append(line)
             elif line.startswith('@'):
-                channels.append(line[1:])
+                lines.append(line[1:])
             else:
-                channels.append(line)
-                
+                lines.append(line)
+    return lines
+
+def load_sources():
+    raw_lines = load_file_lines(SOURCES_FILE, ["AR14N24B", "oneclickvpnkeys", "persianvpnhub", "filembad"])
+    channels = [x for x in raw_lines if not x.startswith('http')]
+    subs = [x for x in raw_lines if x.startswith('http')]
     return channels, subs
 
 def load_sh_x_channels():
-    sh_x_channels = []
-    if not os.path.exists(SH_X_SOURCES_FILE):
-        with open(SH_X_SOURCES_FILE, 'w', encoding='utf-8') as f:
-            f.write("# لیست کانال‌های تلگرام برای بررسی اختصاصی آی‌پی ش.خ\n")
-            f.write("oneclickvpnkeys\n")
-            f.write("moftconfig\n")
-            
-    with open(SH_X_SOURCES_FILE, 'r', encoding='utf-8') as f:
-        for line in f:
-            line = line.strip()
-            if not line or line.startswith('#'):
-                continue
-            if line.startswith('@'):
-                sh_x_channels.append(line[1:])
-            elif 't.me/' in line:
-                ch = line.split('t.me/')[-1].split('/')[0].replace('s', '').replace('+', '')
-                if ch: sh_x_channels.append(ch)
-            else:
-                sh_x_channels.append(line)
-    return sh_x_channels
+    return load_file_lines(SH_X_SOURCES_FILE, ["oneclickvpnkeys", "moftconfig"])
 
 def update_remark(config, remark):
     if config.startswith('vmess://'):
@@ -220,8 +218,7 @@ def update_remark(config, remark):
 
 def get_country_info(ip_or_host):
     db_path = 'GeoLite2-Country.mmdb'
-    if not os.path.exists(db_path):
-        return ""
+    if not os.path.exists(db_path): return ""
     try:
         if not re.match(r'\b(?:\d{1,3}\.){3}\d{1,3}\b', ip_or_host):
             ip = socket.gethostbyname(ip_or_host)
@@ -241,71 +238,54 @@ def get_country_info(ip_or_host):
 def is_internet_pro_config(config):
     try:
         host, port = extract_ip_port(config)
-        if not host: 
-            return False
-        
-        if not re.match(r'\b(?:\d{1,3}\.){3}\d{1,3}\b', host):
-            return False
+        if not host or not re.match(r'\b(?:\d{1,3}\.){3}\d{1,3}\b', host): return False
             
         if config.startswith('vmess://'):
             b64_str = config[8:]
             b64_str += "=" * ((4 - len(b64_str) % 4) % 4)
             data = json.loads(base64.b64decode(b64_str).decode('utf-8'))
             tls = data.get('tls', '').lower()
-            if tls and tls != 'none':
-                return False 
+            if tls and tls != 'none': return False 
             return True
             
         elif config.startswith(('vless://', 'trojan://')):
             parsed = urllib.parse.urlparse(config)
             qs = urllib.parse.parse_qs(parsed.query)
             sec = qs.get('security', [''])[0].lower()
-            if sec and sec != 'none':
-                return False 
+            if sec and sec != 'none': return False 
             return True
-            
-    except Exception:
-        pass
+    except Exception: pass
     return False
 
 def check_ping(config):
     host, port = extract_ip_port(config)
-    if not host or not port:
-        return False
-        
+    if not host or not port: return False
     try:
         socket.setdefaulttimeout(PING_TIMEOUT)
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         s.connect((host, int(port)))
         s.close()
         return True 
-    except Exception:
-        return False 
+    except Exception: return False 
 
 def filter_no_ping_configs(configs):
     selected = []
-    print(f"Checking {len(configs)} configs for NO-PING rule (Standard Net)...")
     with concurrent.futures.ThreadPoolExecutor(max_workers=60) as executor:
         results = executor.map(lambda c: (c, check_ping(c)), configs)
         for config, has_ping in results:
-            if not has_ping: 
-                selected.append(config)
+            if not has_ping: selected.append(config)
     return selected
 
 def filter_pro_configs(configs):
     selected_pro = []
-    print(f"Filtering {len(configs)} PRO configs for Datacenter and Active Ping...")
-    
     valid_dcs = ['ovh', 'hetzner', 'digitalocean', 'linode', 'amazon', 'google', 'microsoft', 
                  'azure', 'oracle', 'leaseweb', 'contabo', 'vultr', 'aruba', 'akamai', 'cloudflare', 'fastly']
     
     asn_db_path = 'GeoLite2-ASN.mmdb'
     reader = None
     if os.path.exists(asn_db_path):
-        try:
-            reader = geoip2.database.Reader(asn_db_path)
-        except Exception as e:
-            print(f"ASN Database Error: {e}")
+        try: reader = geoip2.database.Reader(asn_db_path)
+        except: pass
 
     def is_valid_pro(config):
         host, port = extract_ip_port(config)
@@ -313,48 +293,34 @@ def filter_pro_configs(configs):
         try:
             if not re.match(r'\b(?:\d{1,3}\.){3}\d{1,3}\b', host):
                 ip = socket.gethostbyname(host)
-            else:
-                ip = host
+            else: ip = host
                 
             if reader:
                 org = reader.asn(ip).autonomous_system_organization.lower()
-                if not any(dc in org for dc in valid_dcs):
-                    return False
+                if not any(dc in org for dc in valid_dcs): return False
             
             socket.setdefaulttimeout(PING_TIMEOUT)
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             s.connect((ip, int(port)))
             s.close()
             return True
-        except Exception:
-            return False
+        except: return False
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=60) as executor:
         results = executor.map(lambda c: (c, is_valid_pro(c)), configs)
         for config, is_valid in results:
-            if is_valid: 
-                selected_pro.append(config)
+            if is_valid: selected_pro.append(config)
                 
-    if reader:
-        reader.close()
-        
-    print(f"Found {len(selected_pro)} PRO configs with Valid Datacenters and Active Ping.")
+    if reader: reader.close()
     return selected_pro
 
 def filter_iran_configs(configs):
     iran_configs = []
-    print(f"Checking {len(configs)} V2Ray configs for IR location (Multi-threaded)...")
     db_path = 'GeoLite2-Country.mmdb'
-    
-    if not os.path.exists(db_path):
-        print(f"Error: {db_path} not found! Skipping GeoIP filter (returning empty).")
-        return []
+    if not os.path.exists(db_path): return []
 
-    try:
-        reader = geoip2.database.Reader(db_path)
-    except Exception as e:
-        print(f"Error opening GeoIP DB: {e}")
-        return []
+    try: reader = geoip2.database.Reader(db_path)
+    except: return []
 
     def check_is_iran(config):
         host, port = extract_ip_port(config)
@@ -362,48 +328,44 @@ def filter_iran_configs(configs):
         try:
             if not re.match(r'\b(?:\d{1,3}\.){3}\d{1,3}\b', host):
                 ip = socket.gethostbyname(host)
-            else:
-                ip = host
-            response = reader.country(ip)
-            if response.country.iso_code == 'IR':
-                return True
-        except Exception:
-            pass
+            else: ip = host
+            if reader.country(ip).country.iso_code == 'IR': return True
+        except: pass
         return False
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=60) as executor:
         results = executor.map(lambda c: (c, check_is_iran(c)), configs)
         for config, is_ir in results:
-            if is_ir:
-                iran_configs.append(config)
+            if is_ir: iran_configs.append(config)
                 
     reader.close()
-    print(f"Found {len(iran_configs)} IR configs out of {len(configs)}.")
     return iran_configs
 
 def decode_sub_text(text):
     try:
         clean_text = text.strip().replace('\n', '').replace('\r', '')
         clean_text += "=" * ((4 - len(clean_text) % 4) % 4)
-        decoded = base64.b64decode(clean_text).decode('utf-8')
-        return decoded
-    except Exception:
-        return text 
+        return base64.b64decode(clean_text).decode('utf-8')
+    except: return text 
 
 def fetch_raw_configs():
     channels, subs = load_sources()
-    sh_x_channels = load_sh_x_channels()
-    
-    print(f"Loaded {len(channels)} general channels, {len(sh_x_channels)} sh_x channels, and {len(subs)} sub links.")
+    sh_x_channels = load_sh_x_channels() if ENABLE_SH_X_IP else []
     
     v2ray_links, mtproto_links = set(), set()
+    psiphon_pairs = set()
+    
     pattern_v2ray = r'(?:vless|vmess|trojan|ss|ssr|tuic|hysteria2?)://[^\s"\'<>\n]+'
     pattern_tg = r'(?:https?://t\.me/proxy\?[^\s"\'<>\n]+|tg://proxy\?[^\s"\'<>\n]+)'
     pattern_ip = r'\b(?:\d{1,3}\.){3}\d{1,3}\b'
     
-    sh_x_posts_by_channel = {} 
+    pattern_psiphon_1 = r'(?i)(?:ip|host)[^\d]*?(\b(?:\d{1,3}\.){3}\d{1,3}\b)[^\d]*?(?:port)[^\d]*?(\d{2,5})'
+    pattern_psiphon_2 = r'(\b(?:\d{1,3}\.){3}\d{1,3}\b)[\s\:\-]+(\d{2,5})\b'
+    
+    sh_x_all_ips = set() 
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
 
+    # هر دو لیست با هم ترکیب میشن
     union_channels = list(set(channels + sh_x_channels))
 
     for channel in union_channels:
@@ -416,41 +378,51 @@ def fetch_raw_configs():
                 
                 for widget in messages:
                     msg_text_div = widget.find('div', class_='tgme_widget_message_text')
-                    if not msg_text_div: continue
-                    
-                    text = msg_text_div.get_text(separator=' ')
+                    text = msg_text_div.get_text(separator=' ') if msg_text_div else ""
                     text_lower = text.lower()
                     
-                    if any(keyword in text_lower for keyword in ['psiphon', 'سایفون', 'ترکیبی']):
-                        continue
-                    
+                    # 1. سایفون (از هر دو لیست)
+                    if ENABLE_PSIPHON:
+                        is_psiphon = any(keyword in text_lower for keyword in ['psiphon', 'سایفون', 'سايفون', 'ترکیبی'])
+                        if is_psiphon:
+                            matches = re.findall(pattern_psiphon_1, text)
+                            if not matches: matches = re.findall(pattern_psiphon_2, text)
+                            for ip, port in matches:
+                                if is_valid_public_ip(ip) and 1 <= int(port) <= 65535:
+                                    psiphon_pairs.add((ip, port))
+                            continue 
+
+                    # 2. V2ray (فقط لیست channels) 
                     if channel in channels:
                         for c in re.findall(pattern_v2ray, text): v2ray_links.add(c)
-                        for c in re.findall(pattern_tg, text): mtproto_links.add(c)
-                        
+                        if msg_text_div:
+                            for a_tag in msg_text_div.find_all('a'):
+                                href = a_tag.get('href')
+                                if href:
+                                    for c in re.findall(pattern_v2ray, href): v2ray_links.add(c)
+                                    
+                    # 3. پروکسی تلگرام (MTProto) از هر دو لیست (channels و sh_x_channels) استخراج می‌شود
+                    for c in re.findall(pattern_tg, text): mtproto_links.add(c)
+                    if msg_text_div:
                         for a_tag in msg_text_div.find_all('a'):
                             href = a_tag.get('href')
                             if href:
-                                for c in re.findall(pattern_v2ray, href): v2ray_links.add(c)
                                 for c in re.findall(pattern_tg, href): mtproto_links.add(c)
                             
+                    # 4. آی‌پی‌های ش.خ 
                     if ENABLE_SH_X_IP and (channel in sh_x_channels):
                         has_persian_keywords = 'شیر' in text and 'خورشید' in text
                         has_english_keywords = 'shir' in text_lower and 'khorshid' in text_lower
                         
-                        ips = list(set(re.findall(pattern_ip, text)))
+                        raw_ips = list(set(re.findall(pattern_ip, text)))
+                        valid_ips = [ip for ip in raw_ips if is_valid_public_ip(ip)]
+                        
                         has_configs = bool(re.findall(pattern_v2ray, text)) or bool(re.findall(pattern_tg, text))
-                        is_ip_list = len(ips) >= 4 and not has_configs
+                        is_ip_list = len(valid_ips) >= 4 and not has_configs
                         
                         if has_persian_keywords or has_english_keywords or is_ip_list:
-                            if ips:
-                                time_tag = widget.find('time')
-                                dt_str = time_tag.get('datetime', '') if time_tag else ''
-                                
-                                if channel not in sh_x_posts_by_channel:
-                                    sh_x_posts_by_channel[channel] = []
-                                sh_x_posts_by_channel[channel].append((dt_str, ips))
-                            
+                            for ip in valid_ips: sh_x_all_ips.add(ip)
+
         except Exception as e:
             print(f"Error fetching channel {channel}: {e}")
 
@@ -458,24 +430,15 @@ def fetch_raw_configs():
         try:
             response = requests.get(sub, headers=headers, timeout=15)
             if response.status_code == 200:
-                raw_text = response.text
-                decoded_text = decode_sub_text(raw_text)
-                
+                decoded_text = decode_sub_text(response.text)
                 for c in re.findall(pattern_v2ray, decoded_text): v2ray_links.add(c)
                 for c in re.findall(pattern_tg, decoded_text): mtproto_links.add(c)
-        except Exception as e:
-            print(f"Error fetching sub link {sub}: {e}")
+        except Exception: pass
             
-    newest_sh_x_by_channel = {}
-    for ch, posts in sh_x_posts_by_channel.items():
-        posts.sort(key=lambda x: x[0])
-        newest_sh_x_by_channel[ch] = posts[-1][1] 
-            
-    return list(v2ray_links), list(mtproto_links), newest_sh_x_by_channel
+    return list(v2ray_links), list(mtproto_links), list(sh_x_all_ips), list(psiphon_pairs)
 
-def send_to_telegram(text, specific_sub_url=None, ips_to_copy=None):
-    if SILENT_MODE:
-        return # در حالت بی‌صدا هیچ درخواستی به تلگرام ارسال نمی‌شود
+def send_to_telegram(text, reply_markup=None):
+    if SILENT_MODE: return 
         
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
     payload = {
@@ -484,33 +447,8 @@ def send_to_telegram(text, specific_sub_url=None, ips_to_copy=None):
         'parse_mode': 'HTML',
         'disable_web_page_preview': True
     }
-    
-    if specific_sub_url:
-        payload['reply_markup'] = {
-            "inline_keyboard": [
-                [
-                    {
-                        "text": "🔗 کپی لینک ساب کانفیگ",
-                        "copy_text": {
-                            "text": specific_sub_url
-                        }
-                    }
-                ]
-            ]
-        }
-    elif ips_to_copy:
-        payload['reply_markup'] = {
-            "inline_keyboard": [
-                [
-                    {
-                        "text": "📋 کپی آی‌پی‌ها در کلیپ‌بورد",
-                        "copy_text": {
-                            "text": ips_to_copy
-                        }
-                    }
-                ]
-            ]
-        }
+    if reply_markup:
+        payload['reply_markup'] = reply_markup
         
     resp = requests.post(url, json=payload)
     if resp.status_code != 200:
@@ -528,11 +466,29 @@ def main():
 
     sub_counter = load_sub_counter() 
     
-    new_v2ray, new_mtproto, sh_x_ips_dict = fetch_raw_configs()
-    
-    unique_v2ray = []
-    unique_mtproto = []
+    new_v2ray, new_mtproto, sh_x_all_ips, psiphon_pairs = fetch_raw_configs()
 
+    if ENABLE_PSIPHON and psiphon_pairs:
+        unique_psiphon = []
+        for ip, port in psiphon_pairs:
+            ph_hash = get_hash(f"PSIPHON_{ip}_{port}")
+            if ph_hash not in history:
+                unique_psiphon.append((ip, port))
+                history[ph_hash] = None
+        
+        if unique_psiphon:
+            chunk_size = 10
+            for i in range(0, len(unique_psiphon), chunk_size):
+                chunk = unique_psiphon[i:i + chunk_size]
+                msg = "<b>✨ Psiphon Hosts & Ports</b>\n\nاز قسمت options -> proxy settings وارد کنید:\n\n"
+                for ip, port in chunk:
+                    msg += f"Host: <code>{ip}</code>\nPort: <code>{port}</code>\n\n"
+                msg += f"📡 @{CHANNEL_ID}"
+                send_to_telegram(msg)
+                print(f"Sent {len(chunk)} Psiphon configs.")
+                time.sleep(DELAY_BETWEEN_MSGS)
+
+    unique_v2ray, unique_mtproto = [], []
     for link in new_v2ray:
         link_hash = get_hash(link)
         if link_hash not in history:
@@ -545,9 +501,7 @@ def main():
             unique_mtproto.append(link)
             history[link_hash] = None
 
-    raw_pro_v2ray = []
-    standard_v2ray = []
-    
+    raw_pro_v2ray, standard_v2ray = [], []
     for config in unique_v2ray:
         if ENABLE_INTERNET_PRO and is_internet_pro_config(config):
             raw_pro_v2ray.append(config)
@@ -558,185 +512,144 @@ def main():
     valid_standard_v2ray = filter_iran_configs(standard_v2ray)
 
     if ENABLE_PING_FILTER:
-        print("Ping filter is ON. Filtering standard configs...")
         valid_standard_v2ray = filter_no_ping_configs(valid_standard_v2ray)
         valid_mtproto = filter_no_ping_configs(unique_mtproto)
     else:
-        print("Ping filter is OFF. Processing all new configs...")
         valid_mtproto = unique_mtproto
 
     total_sent = 0
     
-    if ENABLE_SH_X_IP and sh_x_ips_dict:
-        for channel_name, ips in sh_x_ips_dict.items():
-            sorted_ips = sorted(list(set(ips)))
-            ips_combined_str = "SH_X_LIST_" + ",".join(sorted_ips)
-            ips_hash = get_hash(ips_combined_str)
-            
-            if ips_hash not in history:
-                msg = "آی پی برنامه 🦁☀️\n\n"
-                msg += "<blockquote expandable><code>\n"
-                
-                ips_string_for_clipboard = "\n".join(sorted_ips)
-                
-                for ip in sorted_ips:
-                    msg += f"{ip}\n"
-                msg += "</code></blockquote>\n\n"
+    if ENABLE_SH_X_IP and sh_x_all_ips:
+        new_sh_x = []
+        for ip in set(sh_x_all_ips):
+            ip_hash = get_hash(f"SHX_{ip}")
+            if ip_hash not in history:
+                new_sh_x.append(ip)
+                history[ip_hash] = None
+        
+        if new_sh_x:
+            new_sh_x.sort()
+            chunk_size = 150 
+            for i in range(0, len(new_sh_x), chunk_size):
+                chunk = new_sh_x[i:i + chunk_size]
+                msg = "<b>آی پی برنامه 🦁☀️</b>\n\n<blockquote expandable><code>\n"
+                msg += "\n".join(chunk)
+                msg += "\n</code></blockquote>\n\n"
                 msg += f"⚙️ @{CHANNEL_ID}"
                 
-                send_to_telegram(msg, ips_to_copy=ips_string_for_clipboard)
-                history[ips_hash] = None
-                    
-                print(f"Processed NEW Sh_X IP List ({len(sorted_ips)} IPs) from channel: {channel_name}")
+                reply_markup = {
+                    "inline_keyboard": [[{"text": "📋 کپی کل آی‌پی‌ها", "copy_text": {"text": "\n".join(chunk)}}]]
+                }
+                send_to_telegram(msg, reply_markup=reply_markup)
+                print(f"Sent {len(chunk)} New Sh_X IPs.")
                 time.sleep(DELAY_BETWEEN_MSGS)
-            else:
-                print(f"Skipped Sh_X IP List from channel: {channel_name} (Already in history)")
 
     if ENABLE_INTERNET_PRO and valid_pro_v2ray:
-        chunk = []
-        chunk_sub_links = []
-        current_char_count = 0
-        
+        chunk, chunk_sub_links, current_char_count = [], [], 0
         base_msg = f"👨🏻‍💻 مخصوص اینترنت پرو\n\n<blockquote expandable><code>\n</code>\n</blockquote>\n\n📡 @{CHANNEL_ID}\n"
         max_allowed_chars = MAX_TELEGRAM_MSG_CHARS - len(base_msg)
         
         def send_pro_batch(batch, sub_links):
             nonlocal sub_counter, total_sent
             msg = "👨🏻‍💻 مخصوص اینترنت پرو\n\n<blockquote expandable><code>\n"
-            msg += "\n".join(batch)
-            msg += "\n</code>\n</blockquote>\n\n"
-            msg += f"📡 @{CHANNEL_ID}\n"
+            msg += "\n".join(batch) + "\n</code>\n</blockquote>\n\n" + f"📡 @{CHANNEL_ID}\n"
             
             sub_filename = f"@VPNine1-sub{sub_counter}"
             sub_url = f"https://raw.githubusercontent.com/vpnine1/sub/main/{sub_filename}#{sub_filename}"
             sub_content = '\n'.join(sub_links)
             sub_b64 = base64.b64encode(sub_content.encode('utf-8')).decode('utf-8')
             
-            upload_success = upload_sub_to_github(sub_filename, sub_b64)
-            if upload_success:
-                send_to_telegram(msg, specific_sub_url=sub_url)
-                if not SILENT_MODE:
-                    sub_counter += 1
-            else:
-                print(f"GitHub upload failed for {sub_filename}. Sending without sub button.")
-                send_to_telegram(msg, specific_sub_url=None)
+            reply_markup = {"inline_keyboard": [[{"text": "🔗 کپی لینک ساب کانفیگ", "copy_text": {"text": sub_url}}]]}
             
+            if upload_sub_to_github(sub_filename, sub_b64):
+                send_to_telegram(msg, reply_markup=reply_markup)
+                if not SILENT_MODE: sub_counter += 1
+            else:
+                send_to_telegram(msg, reply_markup=None)
             total_sent += len(batch)
-            print(f"Processed {len(batch)} PRO V2ray configs.")
             time.sleep(DELAY_BETWEEN_MSGS)
 
         for link in valid_pro_v2ray:
-            host, port = extract_ip_port(link)
+            host, _ = extract_ip_port(link)
             country_prefix = get_country_info(host) if host else ""
             updated_link = update_remark(link, f"{country_prefix}🚀@{CHANNEL_ID}")
-            escaped_link = html.escape(updated_link)
-            
-            line_len = len(escaped_link) + 1 
+            escaped_link, line_len = html.escape(updated_link), len(html.escape(updated_link)) + 1 
             
             if current_char_count + line_len > max_allowed_chars and chunk:
                 send_pro_batch(chunk, chunk_sub_links)
-                chunk = []
-                chunk_sub_links = []
-                current_char_count = 0
-                
-            chunk.append(escaped_link)
-            chunk_sub_links.append(updated_link)
-            current_char_count += line_len
+                chunk, chunk_sub_links, current_char_count = [], [], 0
             
-        if chunk:
-            send_pro_batch(chunk, chunk_sub_links)
+            chunk.append(escaped_link); chunk_sub_links.append(updated_link); current_char_count += line_len
+            
+        if chunk: send_pro_batch(chunk, chunk_sub_links)
 
     if valid_standard_v2ray:
-        chunk = []
-        chunk_sub_links = []
-        current_char_count = 0
-        
-        if ENABLE_PING_FILTER:
-            bottom_text = "<b>⚙️ اختصاصی برای اینترنت ملی</b>\n\n"
-        else:
-            bottom_text = "<b>💎 V2Ray Servers (Iran)</b>\n\n"
-            
+        chunk, chunk_sub_links, current_char_count = [], [], 0
+        bottom_text = "<b>⚙️ اختصاصی برای اینترنت ملی</b>\n\n" if ENABLE_PING_FILTER else "<b>💎 V2Ray Servers (Iran)</b>\n\n"
         bottom_text += f"✅ <b>Join:</b> @{CHANNEL_ID}\n🌐 #v2ray #vless #vpn #config #کانفیگ\n"
-        
         base_msg = f"<blockquote expandable><code>\n</code>\n</blockquote>\n\n{bottom_text}"
         max_allowed_chars = MAX_TELEGRAM_MSG_CHARS - len(base_msg)
         
         def send_std_batch(batch, sub_links):
             nonlocal sub_counter, total_sent
-            msg = "<blockquote expandable><code>\n"
-            msg += "\n".join(batch)
-            msg += "\n</code>\n</blockquote>\n\n"
-            msg += bottom_text
+            msg = "<blockquote expandable><code>\n" + "\n".join(batch) + "\n</code>\n</blockquote>\n\n" + bottom_text
             
             sub_filename = f"@VPNine1-sub{sub_counter}"
             sub_url = f"https://raw.githubusercontent.com/vpnine1/sub/main/{sub_filename}#{sub_filename}"
             sub_content = '\n'.join(sub_links)
             sub_b64 = base64.b64encode(sub_content.encode('utf-8')).decode('utf-8')
             
-            upload_success = upload_sub_to_github(sub_filename, sub_b64)
-            if upload_success:
-                send_to_telegram(msg, specific_sub_url=sub_url)
-                if not SILENT_MODE:
-                    sub_counter += 1
+            reply_markup = {"inline_keyboard": [[{"text": "🔗 کپی لینک ساب کانفیگ", "copy_text": {"text": sub_url}}]]}
+            
+            if upload_sub_to_github(sub_filename, sub_b64):
+                send_to_telegram(msg, reply_markup=reply_markup)
+                if not SILENT_MODE: sub_counter += 1
             else:
-                print(f"GitHub upload failed for {sub_filename}. Sending without sub button.")
-                send_to_telegram(msg, specific_sub_url=None)
-                
+                send_to_telegram(msg, reply_markup=None)
             total_sent += len(batch)
-            print(f"Processed {len(batch)} Standard V2ray configs.")
             time.sleep(DELAY_BETWEEN_MSGS)
 
         for link in valid_standard_v2ray:
-            host, port = extract_ip_port(link)
+            host, _ = extract_ip_port(link)
             country_prefix = get_country_info(host) if host else ""
             updated_link = update_remark(link, f"{country_prefix}🚀@{CHANNEL_ID}")
-            escaped_link = html.escape(updated_link)
-            
-            line_len = len(escaped_link) + 1 
+            escaped_link, line_len = html.escape(updated_link), len(html.escape(updated_link)) + 1 
             
             if current_char_count + line_len > max_allowed_chars and chunk:
                 send_std_batch(chunk, chunk_sub_links)
-                chunk = []
-                chunk_sub_links = []
-                current_char_count = 0
-                
-            chunk.append(escaped_link)
-            chunk_sub_links.append(updated_link)
-            current_char_count += line_len
+                chunk, chunk_sub_links, current_char_count = [], [], 0
             
-        if chunk:
-            send_std_batch(chunk, chunk_sub_links)
+            chunk.append(escaped_link); chunk_sub_links.append(updated_link); current_char_count += line_len
+            
+        if chunk: send_std_batch(chunk, chunk_sub_links)
 
-    if ENABLE_MTPROTO:
+    if ENABLE_MTPROTO and valid_mtproto:
         for i in range(0, len(valid_mtproto), MTPROTO_CHUNK_SIZE):
             chunk = valid_mtproto[i:i + MTPROTO_CHUNK_SIZE]
+            msg = "<b>🛡 Premium MTProto Proxies (نت ملی)</b>\n\n" if ENABLE_PING_FILTER else "<b>🛡 Premium MTProto Proxies (New Updates)</b>\n\n"
+            msg += f"🛡 <b>Join:</b> @{CHANNEL_ID}\n🌐 #mtproto #proxy\n"
             
-            if ENABLE_PING_FILTER:
-                msg = "<b>🛡 Premium MTProto Proxies (نت ملی)</b>\n\n"
-            else:
-                msg = "<b>🛡 Premium MTProto Proxies (New Updates)</b>\n\n"
-            
+            inline_keyboard = []
+            row = []
             for idx, link in enumerate(chunk, 1):
-                escaped_link = html.escape(link)
-                msg += f"🔹 <a href='{escaped_link}'>Connect to Proxy {idx}</a>\n"
-                
-            msg += f"\n\n🛡 <b>Join:</b> @{CHANNEL_ID}\n"
-            msg += "🌐 #mtproto #proxy\n"
-
-            send_to_telegram(msg)
+                row.append({"text": f"🛡 Proxy {idx}", "url": link})
+                if len(row) == 2: 
+                    inline_keyboard.append(row)
+                    row = []
+            if row: inline_keyboard.append(row)
+            
+            reply_markup = {"inline_keyboard": inline_keyboard}
+            send_to_telegram(msg, reply_markup=reply_markup)
             total_sent += len(chunk)
-            print(f"Processed {len(chunk)} MTProto configs.")
             time.sleep(DELAY_BETWEEN_MSGS)
     
-    if not SILENT_MODE:
-        save_sub_counter(sub_counter)
-    
+    if not SILENT_MODE: save_sub_counter(sub_counter)
     save_history(history)
     
     if SILENT_MODE:
-        print(f"\n✅ SILENT MODE FINISHED. Processed {total_sent} configs. History is updated. NOW SET 'SILENT_MODE = False' AND RUN AGAIN.")
+        print(f"\n✅ SILENT MODE FINISHED. Processed {total_sent} items. History is updated. NOW SET 'SILENT_MODE = False' AND RUN AGAIN.")
     else:
-        print(f"Process finished. Successfully sent {total_sent} configs.")
+        print(f"Process finished. Successfully sent items.")
 
 if __name__ == '__main__':
     main()
