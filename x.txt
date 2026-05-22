@@ -22,3 +22,4 @@ live_CONf
 ultrasurf_12
 mtproto_proserver
 kapsolvpn
+i10VPN
