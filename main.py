@@ -19,7 +19,7 @@ MTPROTO_CHUNK_SIZE = 10
 DELAY_BETWEEN_MSGS = 10
 
 # 🔴 حالت بی‌صدا (برای هماهنگ‌سازی دیتابیس بدون ارسال پیام)
-SILENT_MODE = True  # بعد از یک بار اجرای موفق، این را به False تغییر دهید
+SILENT_MODE = False  # بعد از یک بار اجرای موفق، این را به False تغییر دهید
 
 # تنظیمات کنترل ارسال
 ENABLE_INTERNET_PRO = False   
