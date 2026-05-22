@@ -17,7 +17,7 @@ from datetime import datetime
 CHANNEL_ID = "VPNine1"
 MAX_TELEGRAM_MSG_CHARS = 3800  
 MTPROTO_CHUNK_SIZE = 4
-PSIPHON_CHUNK_SIZE = 4  # 👈 تعداد کانفیگ‌های سایفون در هر پیام
+PSIPHON_CHUNK_SIZE = 4  
 DELAY_BETWEEN_MSGS = 10
 
 # 🔴 حالت بی‌صدا (برای هماهنگ‌سازی دیتابیس بدون ارسال پیام)
@@ -126,7 +126,8 @@ def load_history():
 
 def save_history(history):
     with open(HISTORY_FILE, 'w', encoding='utf-8') as f:
-        f.write('\n'.join(list(history.keys())[-5000:]))
+        # افزایش ظرفیت تاریخچه برای جلوگیری از فراموشی و اسپم
+        f.write('\n'.join(list(history.keys())[-8000:]))
 
 def load_sub_counter():
     if os.path.exists(COUNTER_FILE):
@@ -361,10 +362,9 @@ def fetch_raw_configs():
     pattern_tg = r'(?:https?://t\.me/proxy\?[^\s"\'<>\n]+|tg://proxy\?[^\s"\'<>\n]+)'
     pattern_ip = r'\b(?:\d{1,3}\.){3}\d{1,3}\b'
     
-    # الگوی استخراج سایفون: آی‌پی و پورت حتماً باید در دو خط مجزا باشند
     pattern_psiphon_multiline = r'(?i)(?:ip|hostname|host)[\s:=-]*(\b(?:\d{1,3}\.){3}\d{1,3}\b)[^\n\r]*[\n\r]+[^\n\r]*?(?:port|پورت)[\s:=-]*(\d{2,5})'
     
-    sh_x_all_ips = set() 
+    sh_x_posts = {}  # 👈 دیکشنری جدید برای ذخیره آی‌پی‌ها بر اساس آیدی پست
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
 
     union_channels = list(set(channels + sh_x_channels))
@@ -379,6 +379,9 @@ def fetch_raw_configs():
                 messages = soup.find_all('div', class_='tgme_widget_message')
                 
                 for widget in messages:
+                    # 🔴 استخراج آیدی یکتای پست تلگرام (مثل moftconfig/12345)
+                    post_id = widget.get('data-post')
+                    
                     msg_text_div = widget.find('div', class_='tgme_widget_message_text')
                     text = msg_text_div.get_text(separator='\n') if msg_text_div else ""
                     text_lower = text.lower()
@@ -389,7 +392,6 @@ def fetch_raw_configs():
                         if time_tag['datetime'].startswith(today_str):
                             msg_is_today = True
                     
-                    # 🔴 تغییر اول: اگر پیام برای امروز نیست، کلا بررسی نشود و بره پیام بعدی
                     if not msg_is_today:
                         continue
                     
@@ -420,21 +422,18 @@ def fetch_raw_configs():
                             if href:
                                 for c in re.findall(pattern_tg, href): mtproto_links.add(c)
                             
-                    # 4. آی‌پی‌های ش.خ 
-                    if ENABLE_SH_X_IP and (channel in sh_x_channels):
+                    # 4. آی‌پی‌های ش.خ بر اساس پست
+                    if ENABLE_SH_X_IP and (channel in sh_x_channels) and post_id:
                         raw_ips = list(set(re.findall(pattern_ip, text)))
-                        
-                        # تابع is_valid_public_ip دی‌ان‌اس‌ها و آی‌پی‌های نامعتبر رو فیلتر می‌کنه
                         valid_ips = [ip for ip in raw_ips if is_valid_public_ip(ip)]
                         
-                        # 🔴 تغییر دوم: اگر حداقل ۵ تا آی‌پی معتبر توی پست بود، همه‌شون رو ذخیره کن
                         if len(valid_ips) >= 5:
-                            for ip in valid_ips: sh_x_all_ips.add(ip)
+                            # آی‌پی‌ها را تحت نام همان پست ذخیره می‌کنیم
+                            sh_x_posts[post_id] = valid_ips
 
         except Exception as e:
             print(f"Error fetching channel {channel}: {e}")
 
-    # لینک‌های ساب (subs) چون فایل‌های تکست هستن تاریخ ندارن، همون‌ها رو پردازش می‌کنه
     for sub in subs:
         try:
             response = requests.get(sub, headers=headers, timeout=15)
@@ -444,7 +443,8 @@ def fetch_raw_configs():
                 for c in re.findall(pattern_tg, decoded_text): mtproto_links.add(c)
         except Exception: pass
             
-    return list(v2ray_links), list(mtproto_links), list(sh_x_all_ips), list(psiphon_pairs)
+    # 👈 حالا به جای یک لیست ساده، دیکشنری پست‌ها را برمی‌گردانیم
+    return list(v2ray_links), list(mtproto_links), sh_x_posts, list(psiphon_pairs)
     
 
 def send_to_telegram(text, reply_markup=None):
@@ -476,15 +476,14 @@ def main():
 
     sub_counter = load_sub_counter() 
     
-    # 👈 شروع گرفتن دیتا
     print("⏳ در حال جمع‌آوری اطلاعات از کانال‌ها...")
-    new_v2ray, new_mtproto, sh_x_all_ips, psiphon_pairs = fetch_raw_configs()
+    # 👈 دریافت خروجی جدید (sh_x_posts به صورت دیکشنری)
+    new_v2ray, new_mtproto, sh_x_posts, psiphon_pairs = fetch_raw_configs()
 
-    # 👈 گزارش خام پیدا شده‌ها
     print("\n================ گزارش جستجوی خام ================")
     print(f"🔍 مجموع V2Ray پیدا شده: {len(new_v2ray)}")
     print(f"🔍 مجموع MTProto پیدا شده: {len(new_mtproto)}")
-    print(f"🔍 مجموع آی‌پی‌های ش.خ: {len(sh_x_all_ips)}")
+    print(f"🔍 مجموع پست‌های دارای آی‌پی ش.خ: {len(sh_x_posts)}")
     print(f"🔍 مجموع سرورهای سایفون (امروز): {len(psiphon_pairs)}")
     print("==================================================\n")
 
@@ -543,20 +542,26 @@ def main():
 
     total_sent = 0
     
-    if ENABLE_SH_X_IP and sh_x_all_ips:
-        new_sh_x = []
-        for ip in set(sh_x_all_ips):
-            ip_hash = get_hash(f"SHX_{ip}")
-            if ip_hash not in history:
-                new_sh_x.append(ip)
-                history[ip_hash] = None
+    # ================= 🔴 منطق جدید ش.خ بر اساس پست =================
+    if ENABLE_SH_X_IP and sh_x_posts:
+        new_sh_x_ips = set()
+        new_post_hashes = []
         
-        if new_sh_x:
-            new_sh_x.sort()
-            print(f"✅ {len(new_sh_x)} آی‌پی جدید ش.خ برای ارسال آماده شد.")
+        for post_id, ips in sh_x_posts.items():
+            post_hash = get_hash(f"POST_{post_id}")
+            # اگر این پست تلگرامی را قبلاً ندیده‌ایم
+            if post_hash not in history:
+                new_sh_x_ips.update(ips)
+                new_post_hashes.append(post_hash)
+        
+        if new_sh_x_ips:
+            new_sh_x_list = sorted(list(new_sh_x_ips))
+            print(f"✅ پیدا شدن {len(new_post_hashes)} پست جدید ش.خ! آماده‌سازی {len(new_sh_x_list)} آی‌پی جهت ارسال.")
+            
+            # ارسال بر اساس محدودیت (مثلا 150 خط در هر پیام برای زیبایی و امنیت محدودیت کاراکتر)
             chunk_size = 150 
-            for i in range(0, len(new_sh_x), chunk_size):
-                chunk = new_sh_x[i:i + chunk_size]
+            for i in range(0, len(new_sh_x_list), chunk_size):
+                chunk = new_sh_x_list[i:i + chunk_size]
                 msg = "<b>آی پی برنامه 🦁☀️</b>\n\n<blockquote expandable><code>\n"
                 msg += "\n".join(chunk)
                 msg += "\n</code></blockquote>\n\n"
@@ -568,6 +573,11 @@ def main():
                 send_to_telegram(msg, reply_markup=reply_markup)
                 print(f"📤 Sent {len(chunk)} New Sh_X IPs to Telegram.")
                 time.sleep(DELAY_BETWEEN_MSGS)
+            
+            # فقط پس از پردازش موفق، آیدی این پست‌ها را وارد تاریخچه کن
+            for ph in new_post_hashes:
+                history[ph] = None
+    # ==============================================================
 
     if ENABLE_INTERNET_PRO and valid_pro_v2ray:
         chunk, chunk_sub_links, current_char_count = [], [], 0
