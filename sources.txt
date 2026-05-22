@@ -16,3 +16,4 @@ PrivateVPNs
 SayanStoree
 live_CONf
 canfigiop
+kapsolvpn
