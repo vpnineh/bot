@@ -126,7 +126,7 @@ def load_history():
 
 def save_history(history):
     with open(HISTORY_FILE, 'w', encoding='utf-8') as f:
-        f.write('\n'.join(list(history.keys())[-8000:]))
+        f.write('\n'.join(list(history.keys())[-2000:]))
 
 def load_sub_counter():
     if os.path.exists(COUNTER_FILE):
