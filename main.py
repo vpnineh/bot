@@ -14,9 +14,12 @@ import geoip2.database
 
 # ================= تنظیمات =================
 CHANNEL_ID = "VPNine1"
-MAX_TELEGRAM_MSG_CHARS = 3800  # محدودیت کاراکتر برای هر پست
+MAX_TELEGRAM_MSG_CHARS = 3800  
 MTPROTO_CHUNK_SIZE = 10
 DELAY_BETWEEN_MSGS = 10
+
+# 🔴 حالت بی‌صدا (برای هماهنگ‌سازی دیتابیس بدون ارسال پیام)
+SILENT_MODE = True  # بعد از یک بار اجرای موفق، این را به False تغییر دهید
 
 # تنظیمات کنترل ارسال
 ENABLE_INTERNET_PRO = False   
@@ -40,6 +43,10 @@ HISTORY_FILE = 'history.txt'
 SOURCES_FILE = 'sources.txt'
 SH_X_SOURCES_FILE = 'x.txt'
 COUNTER_FILE = 'sub_counter.txt'
+
+# اگر روی حالت بی‌صدا هستیم، تاخیرها را صفر می‌کنیم تا سریع تمام شود
+if SILENT_MODE:
+    DELAY_BETWEEN_MSGS = 0
 
 def extract_ip_port(config):
     try:
@@ -109,6 +116,9 @@ def save_sub_counter(count):
         f.write(str(count))
 
 def upload_sub_to_github(filename, content_b64):
+    if SILENT_MODE:
+        return True # در حالت بی‌صدا نیازی به آپلود فایل ساب نیست
+        
     if not GITHUB_TOKEN_DEST:
         print("Error: DEST_REPO_TOKEN is missing!")
         return False
@@ -464,6 +474,9 @@ def fetch_raw_configs():
     return list(v2ray_links), list(mtproto_links), newest_sh_x_by_channel
 
 def send_to_telegram(text, specific_sub_url=None, ips_to_copy=None):
+    if SILENT_MODE:
+        return # در حالت بی‌صدا هیچ درخواستی به تلگرام ارسال نمی‌شود
+        
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
     payload = {
         'chat_id': TARGET_CHANNEL,
@@ -554,16 +567,10 @@ def main():
 
     total_sent = 0
     
-    # ================= بررسی لیست آی‌پی‌های ش.خ به صورت یکجا =================
     if ENABLE_SH_X_IP and sh_x_ips_dict:
         for channel_name, ips in sh_x_ips_dict.items():
-            # مرتب کردن آی‌پی‌ها برای اینکه اگر جایشان عوض شد، هش تغییر نکند
             sorted_ips = sorted(list(set(ips)))
-            
-            # چسباندن کل لیست به هم با یک پیشوند مشخص
             ips_combined_str = "SH_X_LIST_" + ",".join(sorted_ips)
-            
-            # گرفتن هش از کل رشته
             ips_hash = get_hash(ips_combined_str)
             
             if ips_hash not in history:
@@ -578,16 +585,13 @@ def main():
                 msg += f"⚙️ @{CHANNEL_ID}"
                 
                 send_to_telegram(msg, ips_to_copy=ips_string_for_clipboard)
-                
-                # ذخیره هشِ کل لیست در هیستوری
                 history[ips_hash] = None
                     
-                print(f"Sent NEW Sh_X IP List ({len(sorted_ips)} IPs) from channel: {channel_name}")
+                print(f"Processed NEW Sh_X IP List ({len(sorted_ips)} IPs) from channel: {channel_name}")
                 time.sleep(DELAY_BETWEEN_MSGS)
             else:
                 print(f"Skipped Sh_X IP List from channel: {channel_name} (Already in history)")
 
-    # ================= ارسال کانفیگ‌های اینترنت پرو بر اساس حجم کاراکتر =================
     if ENABLE_INTERNET_PRO and valid_pro_v2ray:
         chunk = []
         chunk_sub_links = []
@@ -611,13 +615,14 @@ def main():
             upload_success = upload_sub_to_github(sub_filename, sub_b64)
             if upload_success:
                 send_to_telegram(msg, specific_sub_url=sub_url)
-                sub_counter += 1
+                if not SILENT_MODE:
+                    sub_counter += 1
             else:
                 print(f"GitHub upload failed for {sub_filename}. Sending without sub button.")
                 send_to_telegram(msg, specific_sub_url=None)
             
             total_sent += len(batch)
-            print(f"Sent {len(batch)} PRO V2ray configs. Waiting {DELAY_BETWEEN_MSGS} seconds...")
+            print(f"Processed {len(batch)} PRO V2ray configs.")
             time.sleep(DELAY_BETWEEN_MSGS)
 
         for link in valid_pro_v2ray:
@@ -641,7 +646,6 @@ def main():
         if chunk:
             send_pro_batch(chunk, chunk_sub_links)
 
-    # ================= ارسال کانفیگ‌های معمولی (ایران) بر اساس حجم کاراکتر =================
     if valid_standard_v2ray:
         chunk = []
         chunk_sub_links = []
@@ -672,13 +676,14 @@ def main():
             upload_success = upload_sub_to_github(sub_filename, sub_b64)
             if upload_success:
                 send_to_telegram(msg, specific_sub_url=sub_url)
-                sub_counter += 1
+                if not SILENT_MODE:
+                    sub_counter += 1
             else:
                 print(f"GitHub upload failed for {sub_filename}. Sending without sub button.")
                 send_to_telegram(msg, specific_sub_url=None)
                 
             total_sent += len(batch)
-            print(f"Sent {len(batch)} Standard V2ray configs. Waiting {DELAY_BETWEEN_MSGS} seconds...")
+            print(f"Processed {len(batch)} Standard V2ray configs.")
             time.sleep(DELAY_BETWEEN_MSGS)
 
         for link in valid_standard_v2ray:
@@ -702,7 +707,6 @@ def main():
         if chunk:
             send_std_batch(chunk, chunk_sub_links)
 
-    # ================= ارسال پروکسی‌های تلگرام =================
     if ENABLE_MTPROTO:
         for i in range(0, len(valid_mtproto), MTPROTO_CHUNK_SIZE):
             chunk = valid_mtproto[i:i + MTPROTO_CHUNK_SIZE]
@@ -721,14 +725,18 @@ def main():
 
             send_to_telegram(msg)
             total_sent += len(chunk)
-            
-            if i + MTPROTO_CHUNK_SIZE < len(valid_mtproto):
-                print(f"Sent {len(chunk)} MTProto configs. Waiting {DELAY_BETWEEN_MSGS} seconds...")
-                time.sleep(DELAY_BETWEEN_MSGS)
+            print(f"Processed {len(chunk)} MTProto configs.")
+            time.sleep(DELAY_BETWEEN_MSGS)
     
-    save_sub_counter(sub_counter)
+    if not SILENT_MODE:
+        save_sub_counter(sub_counter)
+    
     save_history(history)
-    print(f"Process finished. Successfully sent {total_sent} configs.")
+    
+    if SILENT_MODE:
+        print(f"\n✅ SILENT MODE FINISHED. Processed {total_sent} configs. History is updated. NOW SET 'SILENT_MODE = False' AND RUN AGAIN.")
+    else:
+        print(f"Process finished. Successfully sent {total_sent} configs.")
 
 if __name__ == '__main__':
     main()
