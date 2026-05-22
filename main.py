@@ -17,7 +17,7 @@ from datetime import datetime
 CHANNEL_ID = "VPNine1"
 MAX_TELEGRAM_MSG_CHARS = 3800  
 MTPROTO_CHUNK_SIZE = 10
-PSIPHON_CHUNK_SIZE = 5  # 👈 تعداد کانفیگ‌های سایفون در هر پیام
+PSIPHON_CHUNK_SIZE = 10  # 👈 تعداد کانفیگ‌های سایفون در هر پیام
 DELAY_BETWEEN_MSGS = 10
 
 # 🔴 حالت بی‌صدا (برای هماهنگ‌سازی دیتابیس بدون ارسال پیام)
@@ -425,4 +425,239 @@ def fetch_raw_configs():
                         raw_ips = list(set(re.findall(pattern_ip, text)))
                         valid_ips = [ip for ip in raw_ips if is_valid_public_ip(ip)]
                         
-                        has_configs = bool(re.findall
+                        has_configs = bool(re.findall(pattern_v2ray, text)) or bool(re.findall(pattern_tg, text))
+                        is_ip_list = len(valid_ips) >= 4 and not has_configs
+                        
+                        if has_persian_keywords or has_english_keywords or is_ip_list:
+                            for ip in valid_ips: sh_x_all_ips.add(ip)
+
+        except Exception as e:
+            print(f"Error fetching channel {channel}: {e}")
+
+    for sub in subs:
+        try:
+            response = requests.get(sub, headers=headers, timeout=15)
+            if response.status_code == 200:
+                decoded_text = decode_sub_text(response.text)
+                for c in re.findall(pattern_v2ray, decoded_text): v2ray_links.add(c)
+                for c in re.findall(pattern_tg, decoded_text): mtproto_links.add(c)
+        except Exception: pass
+            
+    return list(v2ray_links), list(mtproto_links), list(sh_x_all_ips), list(psiphon_pairs)
+
+def send_to_telegram(text, reply_markup=None):
+    if SILENT_MODE: return 
+        
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+    payload = {
+        'chat_id': TARGET_CHANNEL,
+        'text': text,
+        'parse_mode': 'HTML',
+        'disable_web_page_preview': True
+    }
+    if reply_markup:
+        payload['reply_markup'] = reply_markup
+        
+    resp = requests.post(url, json=payload)
+    if resp.status_code != 200:
+        print(f"Telegram API Error: {resp.text}")
+
+def main():
+    if not BOT_TOKEN or not TARGET_CHANNEL:
+        print("Error: Missing credentials.")
+        return
+
+    history, needs_conversion = load_history()
+    if needs_conversion:
+        save_history(history)
+        print("✅ History file converted and saved in standard MD5 Hash format.")
+
+    sub_counter = load_sub_counter() 
+    
+    new_v2ray, new_mtproto, sh_x_all_ips, psiphon_pairs = fetch_raw_configs()
+
+    if ENABLE_PSIPHON and psiphon_pairs:
+        unique_psiphon = []
+        for ip, port in psiphon_pairs:
+            ph_hash = get_hash(f"PSIPHON_{ip}_{port}")
+            if ph_hash not in history:
+                unique_psiphon.append((ip, port))
+                history[ph_hash] = None
+        
+        if unique_psiphon:
+            chunk_size = PSIPHON_CHUNK_SIZE
+            for i in range(0, len(unique_psiphon), chunk_size):
+                chunk = unique_psiphon[i:i + chunk_size]
+                msg = "<b>✨ Psiphon Hosts & Ports</b>\n\nاز قسمت options -> proxy settings وارد کنید:\n\n"
+                for ip, port in chunk:
+                    msg += f"Host: <code>{ip}</code>\nPort: <code>{port}</code>\n\n"
+                msg += f"📡 @{CHANNEL_ID}"
+                send_to_telegram(msg)
+                print(f"Sent {len(chunk)} Psiphon configs.")
+                time.sleep(DELAY_BETWEEN_MSGS)
+
+    unique_v2ray, unique_mtproto = [], []
+    for link in new_v2ray:
+        link_hash = get_hash(link)
+        if link_hash not in history:
+            unique_v2ray.append(link)
+            history[link_hash] = None
+            
+    for link in new_mtproto:
+        link_hash = get_hash(link)
+        if link_hash not in history:
+            unique_mtproto.append(link)
+            history[link_hash] = None
+
+    raw_pro_v2ray, standard_v2ray = [], []
+    for config in unique_v2ray:
+        if ENABLE_INTERNET_PRO and is_internet_pro_config(config):
+            raw_pro_v2ray.append(config)
+        else:
+            standard_v2ray.append(config)
+
+    valid_pro_v2ray = filter_pro_configs(raw_pro_v2ray) if ENABLE_INTERNET_PRO else []
+    valid_standard_v2ray = filter_iran_configs(standard_v2ray)
+
+    if ENABLE_PING_FILTER:
+        valid_standard_v2ray = filter_no_ping_configs(valid_standard_v2ray)
+        valid_mtproto = filter_no_ping_configs(unique_mtproto)
+    else:
+        valid_mtproto = unique_mtproto
+
+    total_sent = 0
+    
+    if ENABLE_SH_X_IP and sh_x_all_ips:
+        new_sh_x = []
+        for ip in set(sh_x_all_ips):
+            ip_hash = get_hash(f"SHX_{ip}")
+            if ip_hash not in history:
+                new_sh_x.append(ip)
+                history[ip_hash] = None
+        
+        if new_sh_x:
+            new_sh_x.sort()
+            chunk_size = 150 
+            for i in range(0, len(new_sh_x), chunk_size):
+                chunk = new_sh_x[i:i + chunk_size]
+                msg = "<b>آی پی برنامه 🦁☀️</b>\n\n<blockquote expandable><code>\n"
+                msg += "\n".join(chunk)
+                msg += "\n</code></blockquote>\n\n"
+                msg += f"⚙️ @{CHANNEL_ID}"
+                
+                reply_markup = {
+                    "inline_keyboard": [[{"text": "📋 کپی کل آی‌پی‌ها", "copy_text": {"text": "\n".join(chunk)}}]]
+                }
+                send_to_telegram(msg, reply_markup=reply_markup)
+                print(f"Sent {len(chunk)} New Sh_X IPs.")
+                time.sleep(DELAY_BETWEEN_MSGS)
+
+    if ENABLE_INTERNET_PRO and valid_pro_v2ray:
+        chunk, chunk_sub_links, current_char_count = [], [], 0
+        base_msg = f"👨🏻‍💻 مخصوص اینترنت پرو\n\n<blockquote expandable><code>\n</code>\n</blockquote>\n\n📡 @{CHANNEL_ID}\n"
+        max_allowed_chars = MAX_TELEGRAM_MSG_CHARS - len(base_msg)
+        
+        def send_pro_batch(batch, sub_links):
+            nonlocal sub_counter, total_sent
+            msg = "👨🏻‍💻 مخصوص اینترنت پرو\n\n<blockquote expandable><code>\n"
+            msg += "\n".join(batch) + "\n</code>\n</blockquote>\n\n" + f"📡 @{CHANNEL_ID}\n"
+            
+            sub_filename = f"@VPNine1-sub{sub_counter}"
+            sub_url = f"https://raw.githubusercontent.com/vpnine1/sub/main/{sub_filename}#{sub_filename}"
+            sub_content = '\n'.join(sub_links)
+            sub_b64 = base64.b64encode(sub_content.encode('utf-8')).decode('utf-8')
+            
+            reply_markup = {"inline_keyboard": [[{"text": "🔗 کپی لینک ساب کانفیگ", "copy_text": {"text": sub_url}}]]}
+            
+            if upload_sub_to_github(sub_filename, sub_b64):
+                send_to_telegram(msg, reply_markup=reply_markup)
+                if not SILENT_MODE: sub_counter += 1
+            else:
+                send_to_telegram(msg, reply_markup=None)
+            total_sent += len(batch)
+            time.sleep(DELAY_BETWEEN_MSGS)
+
+        for link in valid_pro_v2ray:
+            host, _ = extract_ip_port(link)
+            country_prefix = get_country_info(host) if host else ""
+            updated_link = update_remark(link, f"{country_prefix}🚀@{CHANNEL_ID}")
+            escaped_link, line_len = html.escape(updated_link), len(html.escape(updated_link)) + 1 
+            
+            if current_char_count + line_len > max_allowed_chars and chunk:
+                send_pro_batch(chunk, chunk_sub_links)
+                chunk, chunk_sub_links, current_char_count = [], [], 0
+            
+            chunk.append(escaped_link); chunk_sub_links.append(updated_link); current_char_count += line_len
+            
+        if chunk: send_pro_batch(chunk, chunk_sub_links)
+
+    if valid_standard_v2ray:
+        chunk, chunk_sub_links, current_char_count = [], [], 0
+        bottom_text = "<b>⚙️ اختصاصی برای اینترنت ملی</b>\n\n" if ENABLE_PING_FILTER else "<b>💎 V2Ray Servers (Iran)</b>\n\n"
+        bottom_text += f"✅ <b>Join:</b> @{CHANNEL_ID}\n🌐 #v2ray #vless #vpn #config #کانفیگ\n"
+        base_msg = f"<blockquote expandable><code>\n</code>\n</blockquote>\n\n{bottom_text}"
+        max_allowed_chars = MAX_TELEGRAM_MSG_CHARS - len(base_msg)
+        
+        def send_std_batch(batch, sub_links):
+            nonlocal sub_counter, total_sent
+            msg = "<blockquote expandable><code>\n" + "\n".join(batch) + "\n</code>\n</blockquote>\n\n" + bottom_text
+            
+            sub_filename = f"@VPNine1-sub{sub_counter}"
+            sub_url = f"https://raw.githubusercontent.com/vpnine1/sub/main/{sub_filename}#{sub_filename}"
+            sub_content = '\n'.join(sub_links)
+            sub_b64 = base64.b64encode(sub_content.encode('utf-8')).decode('utf-8')
+            
+            reply_markup = {"inline_keyboard": [[{"text": "🔗 کپی لینک ساب کانفیگ", "copy_text": {"text": sub_url}}]]}
+            
+            if upload_sub_to_github(sub_filename, sub_b64):
+                send_to_telegram(msg, reply_markup=reply_markup)
+                if not SILENT_MODE: sub_counter += 1
+            else:
+                send_to_telegram(msg, reply_markup=None)
+            total_sent += len(batch)
+            time.sleep(DELAY_BETWEEN_MSGS)
+
+        for link in valid_standard_v2ray:
+            host, _ = extract_ip_port(link)
+            country_prefix = get_country_info(host) if host else ""
+            updated_link = update_remark(link, f"{country_prefix}🚀@{CHANNEL_ID}")
+            escaped_link, line_len = html.escape(updated_link), len(html.escape(updated_link)) + 1 
+            
+            if current_char_count + line_len > max_allowed_chars and chunk:
+                send_std_batch(chunk, chunk_sub_links)
+                chunk, chunk_sub_links, current_char_count = [], [], 0
+            
+            chunk.append(escaped_link); chunk_sub_links.append(updated_link); current_char_count += line_len
+            
+        if chunk: send_std_batch(chunk, chunk_sub_links)
+
+    if ENABLE_MTPROTO and valid_mtproto:
+        for i in range(0, len(valid_mtproto), MTPROTO_CHUNK_SIZE):
+            chunk = valid_mtproto[i:i + MTPROTO_CHUNK_SIZE]
+            msg = "<b>🟢 Premium MTProto Proxies (نت ملی)</b>\n\n" if ENABLE_PING_FILTER else "<b>🛡 Premium MTProto Proxies</b>\n\n"
+            msg += f"✅ @{CHANNEL_ID}\n🌐 #mtproto #proxy\n"
+            
+            inline_keyboard = []
+            row = []
+            for idx, link in enumerate(chunk, 1):
+                row.append({"text": f"Connect", "url": link})
+                if len(row) == 2: 
+                    inline_keyboard.append(row)
+                    row = []
+            if row: inline_keyboard.append(row)
+            
+            reply_markup = {"inline_keyboard": inline_keyboard}
+            send_to_telegram(msg, reply_markup=reply_markup)
+            total_sent += len(chunk)
+            time.sleep(DELAY_BETWEEN_MSGS)
+    
+    if not SILENT_MODE: save_sub_counter(sub_counter)
+    save_history(history)
+    
+    if SILENT_MODE:
+        print(f"\n✅ SILENT MODE FINISHED. Processed {total_sent} items. History is updated. NOW SET 'SILENT_MODE = False' AND RUN AGAIN.")
+    else:
+        print(f"Process finished. Successfully sent items.")
+
+if __name__ == '__main__':
+    main()
