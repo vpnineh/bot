@@ -26,3 +26,4 @@ i10VPN
 Confing_m1SHAP
 proxy_kafee
 V2ray_Alpha
+proxylock1
