@@ -47,6 +47,7 @@ jobs:
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
           TARGET_CHANNEL: ${{ secrets.TARGET_CHANNEL }}
           DEST_REPO_TOKEN: ${{ secrets.DEST_REPO_TOKEN }} 
+          PYTHONUNBUFFERED: "1"
         run: python main.py
 
       # ذخیره تاریخچه و شماره ساب برای دوره‌های بعدی اجرا
