@@ -626,13 +626,13 @@ def main():
     if ENABLE_MTPROTO and valid_mtproto:
         for i in range(0, len(valid_mtproto), MTPROTO_CHUNK_SIZE):
             chunk = valid_mtproto[i:i + MTPROTO_CHUNK_SIZE]
-            msg = "<b>🛡 Premium MTProto Proxies (نت ملی)</b>\n\n" if ENABLE_PING_FILTER else "<b>🛡 Premium MTProto Proxies (New Updates)</b>\n\n"
-            msg += f"🛡 <b>Join:</b> @{CHANNEL_ID}\n🌐 #mtproto #proxy\n"
+            msg = "<b>🟢 Premium MTProto Proxies (نت ملی)</b>\n\n" if ENABLE_PING_FILTER else "<b>🛡 Premium MTProto Proxies</b>\n\n"
+            msg += f"✅ @{CHANNEL_ID}\n🌐 #mtproto #proxy\n"
             
             inline_keyboard = []
             row = []
             for idx, link in enumerate(chunk, 1):
-                row.append({"text": f"🛡 Proxy {idx}", "url": link})
+                row.append({"text": f"Connect", "url": link})
                 if len(row) == 2: 
                     inline_keyboard.append(row)
                     row = []
