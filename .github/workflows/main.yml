@@ -34,14 +34,13 @@ jobs:
         with:
           path: '*.mmdb'
           key: geoip-db-${{ env.date }}
-          
+        
       - name: Download GeoIP Databases
         if: steps.cache-geoip.outputs.cache-hit != 'true'
         run: |
           wget -O GeoLite2-Country.mmdb "https://github.com/P3TERX/GeoLite.mmdb/raw/download/GeoLite2-Country.mmdb"
           wget -O GeoLite2-ASN.mmdb "https://github.com/P3TERX/GeoLite.mmdb/raw/download/GeoLite2-ASN.mmdb"
 
-      # مرحله اصلی اجرای اسکریپت پایتون
       - name: Run Script
         env:
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
@@ -50,17 +49,13 @@ jobs:
           PYTHONUNBUFFERED: "1"
         run: python main.py
 
-      # ذخیره تاریخچه و شماره ساب برای دوره‌های بعدی اجرا
       - name: Commit History and Counter
         run: |
-          # تنظیم ایمیل ناشناس برای مخفی ماندن هویت
-          git config --local user.email "12345678+vpnineh@users.noreply.github.com"
-          git config --local user.name "GitHub Action Bot"
+          git config --local user.name "github-actions[bot]"
+          git config --local user.email "41898282+github-actions[bot]@users.noreply.github.com"
           
-          # اضافه کردن فایل تاریخچه و شمارنده ساب
           git add history.txt sub_counter.txt
           
-          # کامیت تغییرات (اگر فایلی تغییر کرده باشد)
           git diff-index --quiet HEAD || git commit -m "Auto-update history and sub counter [skip ci]"
           
           git pull --rebase origin main
