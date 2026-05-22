@@ -483,7 +483,7 @@ def fetch_raw_configs():
             
     return list(v2ray_links), list(mtproto_links), newest_sh_x_by_channel
 
-def send_to_telegram(text, specific_sub_url=None):
+def send_to_telegram(text, specific_sub_url=None, ips_to_copy=None):
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
     payload = {
         'chat_id': TARGET_CHANNEL,
@@ -500,6 +500,19 @@ def send_to_telegram(text, specific_sub_url=None):
                         "text": "🔗 کپی لینک ساب کانفیگ",
                         "copy_text": {
                             "text": specific_sub_url
+                        }
+                    }
+                ]
+            ]
+        }
+    elif ips_to_copy:
+        payload['reply_markup'] = {
+            "inline_keyboard": [
+                [
+                    {
+                        "text": "📋 کپی همه آی‌پی‌ها در کلیپ‌بورد",
+                        "copy_text": {
+                            "text": ips_to_copy
                         }
                     }
                 ]
@@ -558,7 +571,7 @@ def main():
 
     total_sent = 0
     
-    # ================= تغییر اصلی: بررسی تک‌تک آی‌پی‌های ش.خ =================
+    # ================= بررسی تک‌تک آی‌پی‌های ش.خ =================
     if ENABLE_SH_X_IP and sh_x_ips_dict:
         for channel_name, ips in sh_x_ips_dict.items():
             new_ips = []
@@ -573,12 +586,17 @@ def main():
             if new_ips:
                 msg = "آی پی برنامه 🦁☀️\n\n"
                 msg += "<blockquote expandable><code>\n"
+                
+                # ساخت یک رشته متنی فقط شامل آی‌پی‌ها برای کپی شدن در کلیپ‌بورد
+                ips_string_for_clipboard = "\n".join(new_ips)
+                
                 for ip in new_ips:
                     msg += f"{ip}\n"
                 msg += "</code></blockquote>\n\n"
                 msg += f"⚙️ @{CHANNEL_ID}"
                 
-                send_to_telegram(msg)
+                # ارسال پیام به همراه لیست آی‌پی‌ها برای ساخته شدن دکمه
+                send_to_telegram(msg, ips_to_copy=ips_string_for_clipboard)
                 
                 # اضافه کردن آی‌پی‌های جدید به تاریخچه تا دفعه بعد ارسال نشوند
                 for ip in new_ips:
