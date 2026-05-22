@@ -8,7 +8,7 @@ import time
 import html
 import socket
 import concurrent.futures
-import hashlib  # اضافه شدن کتابخانه هش
+import hashlib
 from bs4 import BeautifulSoup
 import geoip2.database
 
@@ -41,7 +41,6 @@ SOURCES_FILE = 'sources.txt'
 SH_X_SOURCES_FILE = 'x.txt'
 COUNTER_FILE = 'sub_counter.txt'
 
-# ================= توابع پایه و استخراج آی‌پی (مورد نیاز فیلترها) =================
 def extract_ip_port(config):
     try:
         if config.startswith('vmess://'):
@@ -68,10 +67,8 @@ def extract_ip_port(config):
         pass
     return None, None
 
-# ================= توابع حذف تکرار معمولی (Hash Based) =================
 def get_hash(text):
     text = text.strip()
-    # حذف نام (remark) از کانفیگ‌ها تا در صورت تغییر نام، کانفیگ تکراری تلقی شود
     if '://' in text and not text.startswith('vmess://'):
         text = text.split('#')[0]
     return hashlib.md5(text.encode('utf-8')).hexdigest()
@@ -85,11 +82,9 @@ def load_history():
                 line = line.strip()
                 if not line: continue
                 
-                # بررسی اینکه آیا خط موجود در فایل از قبل هش است (۳۲ کاراکتر هگزادسیمال)
                 if len(line) == 32 and all(c in '0123456789abcdefABCDEF' for c in line):
                     history[line] = None
                 else:
-                    # اگر فرمت قدیمی (عمیق) یا خام بود، آن را به هش تبدیل می‌کنیم
                     hashed = get_hash(line)
                     history[hashed] = None
                     needs_conversion = True
@@ -98,9 +93,7 @@ def load_history():
 
 def save_history(history):
     with open(HISTORY_FILE, 'w', encoding='utf-8') as f:
-        # ذخیره ۸۰۰۰ رکورد آخر برای جلوگیری از حجیم شدن فایل
         f.write('\n'.join(list(history.keys())[-8000:]))
-# ==============================================================================
 
 def load_sub_counter():
     if os.path.exists(COUNTER_FILE):
@@ -515,7 +508,6 @@ def main():
         print("Error: Missing credentials.")
         return
 
-    # خواندن، بررسی و تبدیل اتوماتیک فرمت دیتابیس به هش هنگام لود شدن
     history, needs_conversion = load_history()
     if needs_conversion:
         save_history(history)
@@ -528,7 +520,6 @@ def main():
     unique_v2ray = []
     unique_mtproto = []
 
-    # ================= اعمال قانون حذف تکرار معمولی (با استفاده از هش) =================
     for link in new_v2ray:
         link_hash = get_hash(link)
         if link_hash not in history:
@@ -563,42 +554,38 @@ def main():
 
     total_sent = 0
     
-    # ================= بررسی تک‌تک آی‌پی‌های ش.خ =================
+    # ================= بررسی لیست آی‌پی‌های ش.خ به صورت یکجا =================
     if ENABLE_SH_X_IP and sh_x_ips_dict:
         for channel_name, ips in sh_x_ips_dict.items():
-            new_ips = []
+            # مرتب کردن آی‌پی‌ها برای اینکه اگر جایشان عوض شد، هش تغییر نکند
+            sorted_ips = sorted(list(set(ips)))
             
-            # چک کردن هر آی‌پی به صورت جداگانه با سیستم هش جدید
-            for ip in ips:
-                ip_hash = get_hash(ip)
-                if ip_hash not in history:
-                    new_ips.append(ip)
+            # چسباندن کل لیست به هم با یک پیشوند مشخص
+            ips_combined_str = "SH_X_LIST_" + ",".join(sorted_ips)
             
-            # اگر آی‌پی جدیدی وجود داشت، فقط همان جدیدها را ارسال کن
-            if new_ips:
+            # گرفتن هش از کل رشته
+            ips_hash = get_hash(ips_combined_str)
+            
+            if ips_hash not in history:
                 msg = "آی پی برنامه 🦁☀️\n\n"
                 msg += "<blockquote expandable><code>\n"
                 
-                # ساخت یک رشته متنی فقط شامل آی‌پی‌ها برای کپی شدن در کلیپ‌بورد
-                ips_string_for_clipboard = "\n".join(new_ips)
+                ips_string_for_clipboard = "\n".join(sorted_ips)
                 
-                for ip in new_ips:
+                for ip in sorted_ips:
                     msg += f"{ip}\n"
                 msg += "</code></blockquote>\n\n"
                 msg += f"⚙️ @{CHANNEL_ID}"
                 
-                # ارسال پیام به همراه لیست آی‌پی‌ها برای ساخته شدن دکمه
                 send_to_telegram(msg, ips_to_copy=ips_string_for_clipboard)
                 
-                # اضافه کردن هش آی‌پی‌های جدید به تاریخچه تا دفعه بعد ارسال نشوند
-                for ip in new_ips:
-                    ip_hash = get_hash(ip)
-                    history[ip_hash] = None
+                # ذخیره هشِ کل لیست در هیستوری
+                history[ips_hash] = None
                     
-                print(f"Sent {len(new_ips)} NEW Sh_X IPs from channel: {channel_name} (Skipped {len(ips) - len(new_ips)} duplicates)")
+                print(f"Sent NEW Sh_X IP List ({len(sorted_ips)} IPs) from channel: {channel_name}")
                 time.sleep(DELAY_BETWEEN_MSGS)
             else:
-                print(f"Skipped Sh_X IPs from channel: {channel_name} (All IPs were already sent)")
+                print(f"Skipped Sh_X IP List from channel: {channel_name} (Already in history)")
 
     # ================= ارسال کانفیگ‌های اینترنت پرو بر اساس حجم کاراکتر =================
     if ENABLE_INTERNET_PRO and valid_pro_v2ray:
