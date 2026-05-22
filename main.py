@@ -48,7 +48,7 @@ COUNTER_FILE = 'sub_counter.txt'
 if SILENT_MODE:
     DELAY_BETWEEN_MSGS = 0
 
-# ================= تابع فیلتر آی‌پی‌های مزاحم و DNS =================
+# ================= توابع فیلتر آی‌پی و اعتبارسنجی =================
 def is_valid_public_ip(ip):
     dns_ips = {
         "8.8.8.8", "8.8.4.4", "1.1.1.1", "1.0.0.1", "9.9.9.9", 
@@ -99,6 +99,21 @@ def extract_ip_port(config):
     except Exception:
         pass
     return None, None
+
+def is_valid_host_ip(config):
+    # بررسی می‌کند که سرور کانفیگ/پروکسی لوکال هاست یا 0.0.0.0 نباشد
+    host, _ = extract_ip_port(config)
+    if not host: return True
+    if host.lower() in ['127.0.0.1', '0.0.0.0', 'localhost']:
+        return False
+    if re.match(r'\b(?:\d{1,3}\.){3}\d{1,3}\b', host):
+        parts = host.split('.')
+        if len(parts) == 4:
+            try:
+                p1 = int(parts[0])
+                if p1 in [0, 127]: return False
+            except: pass
+    return True
 
 def get_hash(text):
     text = text.strip()
@@ -404,20 +419,24 @@ def fetch_raw_configs():
 
                     # 2. V2ray
                     if channel in channels:
-                        for c in re.findall(pattern_v2ray, text): v2ray_links.add(c)
+                        for c in re.findall(pattern_v2ray, text): 
+                            if is_valid_host_ip(c): v2ray_links.add(c)
                         if msg_text_div:
                             for a_tag in msg_text_div.find_all('a'):
                                 href = a_tag.get('href')
                                 if href:
-                                    for c in re.findall(pattern_v2ray, href): v2ray_links.add(c)
+                                    for c in re.findall(pattern_v2ray, href):
+                                        if is_valid_host_ip(c): v2ray_links.add(c)
                                     
                     # 3. MTProto
-                    for c in re.findall(pattern_tg, text): mtproto_links.add(c)
+                    for c in re.findall(pattern_tg, text):
+                        if is_valid_host_ip(c): mtproto_links.add(c)
                     if msg_text_div:
                         for a_tag in msg_text_div.find_all('a'):
                             href = a_tag.get('href')
                             if href:
-                                for c in re.findall(pattern_tg, href): mtproto_links.add(c)
+                                for c in re.findall(pattern_tg, href):
+                                    if is_valid_host_ip(c): mtproto_links.add(c)
                             
                     # 4. آی‌پی‌های ش.خ 
                     if ENABLE_SH_X_IP and (channel in sh_x_channels):
@@ -436,8 +455,10 @@ def fetch_raw_configs():
             response = requests.get(sub, headers=headers, timeout=15)
             if response.status_code == 200:
                 decoded_text = decode_sub_text(response.text)
-                for c in re.findall(pattern_v2ray, decoded_text): v2ray_links.add(c)
-                for c in re.findall(pattern_tg, decoded_text): mtproto_links.add(c)
+                for c in re.findall(pattern_v2ray, decoded_text):
+                    if is_valid_host_ip(c): v2ray_links.add(c)
+                for c in re.findall(pattern_tg, decoded_text):
+                    if is_valid_host_ip(c): mtproto_links.add(c)
         except Exception: pass
             
     return list(v2ray_links), list(mtproto_links), list(sh_x_all_ips), list(psiphon_pairs)
@@ -556,7 +577,9 @@ def main():
                 msg += "\n</code></blockquote>\n\n"
                 msg += f"⚙️ @{CHANNEL_ID}"
 
-                send_to_telegram(msg, reply_markup=reply_markup)
+                # ارسال پیام بدون دکمه شیشه‌ای
+                send_to_telegram(msg)
+                
                 print(f"📤 Sent {len(chunk)} New Sh_X IPs to Telegram.")
                 time.sleep(DELAY_BETWEEN_MSGS)
 
@@ -672,3 +695,5 @@ def main():
 
 if __name__ == '__main__':
     main()
+
+# فیلتر 127.0.0.1 و ... به کانفیگ و پروکسی ها اضافه شد
