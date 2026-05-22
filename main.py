@@ -126,7 +126,7 @@ def load_history():
 
 def save_history(history):
     with open(HISTORY_FILE, 'w', encoding='utf-8') as f:
-        f.write('\n'.join(list(history.keys())[-2000:]))
+        f.write('\n'.join(list(history.keys())[-5000:]))
 
 def load_sub_counter():
     if os.path.exists(COUNTER_FILE):
@@ -501,7 +501,7 @@ def main():
             chunk_size = PSIPHON_CHUNK_SIZE
             for i in range(0, len(unique_psiphon), chunk_size):
                 chunk = unique_psiphon[i:i + chunk_size]
-                msg = "<b>✨ Psiphon Hosts & Ports</b>\n\nاز قسمت options -> proxy settings وارد کنید:\n\n"
+                msg = "<b>✨ Psiphon Hosts & Ports</b>\n\n"
                 for ip, port in chunk:
                     msg += f"Host: <code>{ip}</code>\nPort: <code>{port}</code>\n\n"
                 msg += f"📡 @{CHANNEL_ID}"
