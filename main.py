@@ -16,7 +16,7 @@ from datetime import datetime
 # ================= تنظیمات =================
 CHANNEL_ID = "VPNine1"
 MAX_TELEGRAM_MSG_CHARS = 3800  
-MTPROTO_CHUNK_SIZE = 10
+MTPROTO_CHUNK_SIZE = 5
 PSIPHON_CHUNK_SIZE = 5  # 👈 تعداد کانفیگ‌های سایفون در هر پیام
 DELAY_BETWEEN_MSGS = 10
 
