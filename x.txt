@@ -30,3 +30,4 @@ proxylock1
 darkproxy
 troll_hastam
 RezZonez
+V2RTOX
