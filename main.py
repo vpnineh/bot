@@ -567,10 +567,9 @@ def main():
                 msg += "\n</code></blockquote>\n\n"
                 msg += f"⚙️ @{CHANNEL_ID}"
                 
-                reply_markup = {
-                    "inline_keyboard": [[{"text": "📋 کپی کل آی‌پی‌ها", "copy_text": {"text": "\n".join(chunk)}}]]
-                }
-                send_to_telegram(msg, reply_markup=reply_markup)
+                # دکمه شیشه‌ای حذف شد، پیام مستقیم ارسال می‌شود
+                send_to_telegram(msg)
+                
                 print(f"📤 Sent {len(chunk)} New Sh_X IPs to Telegram.")
                 time.sleep(DELAY_BETWEEN_MSGS)
             
