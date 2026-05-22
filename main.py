@@ -17,7 +17,7 @@ from datetime import datetime
 CHANNEL_ID = "VPNine1"
 MAX_TELEGRAM_MSG_CHARS = 3800  
 MTPROTO_CHUNK_SIZE = 10
-PSIPHON_CHUNK_SIZE = 10  # 👈 تعداد کانفیگ‌های سایفون در هر پیام
+PSIPHON_CHUNK_SIZE = 5  # 👈 تعداد کانفیگ‌های سایفون در هر پیام
 DELAY_BETWEEN_MSGS = 10
 
 # 🔴 حالت بی‌صدا (برای هماهنگ‌سازی دیتابیس بدون ارسال پیام)
@@ -361,7 +361,7 @@ def fetch_raw_configs():
     pattern_tg = r'(?:https?://t\.me/proxy\?[^\s"\'<>\n]+|tg://proxy\?[^\s"\'<>\n]+)'
     pattern_ip = r'\b(?:\d{1,3}\.){3}\d{1,3}\b'
     
-    # 👈 الگوی استخراج سایفون: آی‌پی و پورت حتماً باید در دو خط مجزا (با Enter بینشان) باشند
+    # 👈 الگوی استخراج سایفون: آی‌پی و پورت حتماً باید در دو خط مجزا باشند
     pattern_psiphon_multiline = r'(?i)(?:ip|hostname|host)[\s:=-]*(\b(?:\d{1,3}\.){3}\d{1,3}\b)[^\n\r]*[\n\r]+[^\n\r]*?(?:port|پورت)[\s:=-]*(\d{2,5})'
     
     sh_x_all_ips = set() 
@@ -380,7 +380,6 @@ def fetch_raw_configs():
                 
                 for widget in messages:
                     msg_text_div = widget.find('div', class_='tgme_widget_message_text')
-                    # استفاده از \n برای حفظ ساختار خطوط جهت تطابق دقیق با الگو
                     text = msg_text_div.get_text(separator='\n') if msg_text_div else ""
                     text_lower = text.lower()
                     
@@ -390,7 +389,7 @@ def fetch_raw_configs():
                         if time_tag['datetime'].startswith(today_str):
                             msg_is_today = True
                     
-                    # 1. سایفون (حذف کلمه ترکیبی + اعمال الگوی دو خطی)
+                    # 1. سایفون
                     if ENABLE_PSIPHON and msg_is_today:
                         is_psiphon = any(keyword in text_lower for keyword in ['psiphon', 'سایفون', 'سايفون'])
                         if is_psiphon:
@@ -474,7 +473,17 @@ def main():
 
     sub_counter = load_sub_counter() 
     
+    # 👈 شروع گرفتن دیتا
+    print("⏳ در حال جمع‌آوری اطلاعات از کانال‌ها...")
     new_v2ray, new_mtproto, sh_x_all_ips, psiphon_pairs = fetch_raw_configs()
+
+    # 👈 گزارش خام پیدا شده‌ها
+    print("\n================ گزارش جستجوی خام ================")
+    print(f"🔍 مجموع V2Ray پیدا شده: {len(new_v2ray)}")
+    print(f"🔍 مجموع MTProto پیدا شده: {len(new_mtproto)}")
+    print(f"🔍 مجموع آی‌پی‌های ش.خ: {len(sh_x_all_ips)}")
+    print(f"🔍 مجموع سرورهای سایفون (امروز): {len(psiphon_pairs)}")
+    print("==================================================\n")
 
     if ENABLE_PSIPHON and psiphon_pairs:
         unique_psiphon = []
@@ -485,6 +494,7 @@ def main():
                 history[ph_hash] = None
         
         if unique_psiphon:
+            print(f"✅ {len(unique_psiphon)} کانفیگ جدید سایفون برای ارسال آماده شد.")
             chunk_size = PSIPHON_CHUNK_SIZE
             for i in range(0, len(unique_psiphon), chunk_size):
                 chunk = unique_psiphon[i:i + chunk_size]
@@ -493,7 +503,7 @@ def main():
                     msg += f"Host: <code>{ip}</code>\nPort: <code>{port}</code>\n\n"
                 msg += f"📡 @{CHANNEL_ID}"
                 send_to_telegram(msg)
-                print(f"Sent {len(chunk)} Psiphon configs.")
+                print(f"📤 Sent {len(chunk)} Psiphon configs to Telegram.")
                 time.sleep(DELAY_BETWEEN_MSGS)
 
     unique_v2ray, unique_mtproto = [], []
@@ -509,6 +519,8 @@ def main():
             unique_mtproto.append(link)
             history[link_hash] = None
 
+    print(f"✅ پس از بررسی تاریخچه: {len(unique_v2ray)} V2Ray و {len(unique_mtproto)} MTProto کاملاً جدید هستند.")
+
     raw_pro_v2ray, standard_v2ray = [], []
     for config in unique_v2ray:
         if ENABLE_INTERNET_PRO and is_internet_pro_config(config):
@@ -520,6 +532,7 @@ def main():
     valid_standard_v2ray = filter_iran_configs(standard_v2ray)
 
     if ENABLE_PING_FILTER:
+        print("⏳ در حال پینگ گرفتن و تست سرورها...")
         valid_standard_v2ray = filter_no_ping_configs(valid_standard_v2ray)
         valid_mtproto = filter_no_ping_configs(unique_mtproto)
     else:
@@ -537,6 +550,7 @@ def main():
         
         if new_sh_x:
             new_sh_x.sort()
+            print(f"✅ {len(new_sh_x)} آی‌پی جدید ش.خ برای ارسال آماده شد.")
             chunk_size = 150 
             for i in range(0, len(new_sh_x), chunk_size):
                 chunk = new_sh_x[i:i + chunk_size]
@@ -549,7 +563,7 @@ def main():
                     "inline_keyboard": [[{"text": "📋 کپی کل آی‌پی‌ها", "copy_text": {"text": "\n".join(chunk)}}]]
                 }
                 send_to_telegram(msg, reply_markup=reply_markup)
-                print(f"Sent {len(chunk)} New Sh_X IPs.")
+                print(f"📤 Sent {len(chunk)} New Sh_X IPs to Telegram.")
                 time.sleep(DELAY_BETWEEN_MSGS)
 
     if ENABLE_INTERNET_PRO and valid_pro_v2ray:
@@ -575,6 +589,7 @@ def main():
             else:
                 send_to_telegram(msg, reply_markup=None)
             total_sent += len(batch)
+            print(f"📤 Sent {len(batch)} Pro V2Ray configs to Telegram.")
             time.sleep(DELAY_BETWEEN_MSGS)
 
         for link in valid_pro_v2ray:
@@ -615,6 +630,7 @@ def main():
             else:
                 send_to_telegram(msg, reply_markup=None)
             total_sent += len(batch)
+            print(f"📤 Sent {len(batch)} Standard V2Ray configs to Telegram.")
             time.sleep(DELAY_BETWEEN_MSGS)
 
         for link in valid_standard_v2ray:
@@ -649,6 +665,7 @@ def main():
             reply_markup = {"inline_keyboard": inline_keyboard}
             send_to_telegram(msg, reply_markup=reply_markup)
             total_sent += len(chunk)
+            print(f"📤 Sent {len(chunk)} MTProto proxies to Telegram.")
             time.sleep(DELAY_BETWEEN_MSGS)
     
     if not SILENT_MODE: save_sub_counter(sub_counter)
@@ -657,7 +674,7 @@ def main():
     if SILENT_MODE:
         print(f"\n✅ SILENT MODE FINISHED. Processed {total_sent} items. History is updated. NOW SET 'SILENT_MODE = False' AND RUN AGAIN.")
     else:
-        print(f"Process finished. Successfully sent items.")
+        print(f"\n🏁 Process finished! Total new items sent to Telegram: {total_sent}")
 
 if __name__ == '__main__':
     main()
