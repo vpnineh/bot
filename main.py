@@ -16,8 +16,8 @@ from datetime import datetime
 # ================= تنظیمات =================
 CHANNEL_ID = "VPNine1"
 MAX_TELEGRAM_MSG_CHARS = 3800  
-MTPROTO_CHUNK_SIZE = 5
-PSIPHON_CHUNK_SIZE = 5  # 👈 تعداد کانفیگ‌های سایفون در هر پیام
+MTPROTO_CHUNK_SIZE = 4
+PSIPHON_CHUNK_SIZE = 4  # 👈 تعداد کانفیگ‌های سایفون در هر پیام
 DELAY_BETWEEN_MSGS = 10
 
 # 🔴 حالت بی‌صدا (برای هماهنگ‌سازی دیتابیس بدون ارسال پیام)
@@ -361,7 +361,7 @@ def fetch_raw_configs():
     pattern_tg = r'(?:https?://t\.me/proxy\?[^\s"\'<>\n]+|tg://proxy\?[^\s"\'<>\n]+)'
     pattern_ip = r'\b(?:\d{1,3}\.){3}\d{1,3}\b'
     
-    # 👈 الگوی استخراج سایفون: آی‌پی و پورت حتماً باید در دو خط مجزا باشند
+    # الگوی استخراج سایفون: آی‌پی و پورت حتماً باید در دو خط مجزا باشند
     pattern_psiphon_multiline = r'(?i)(?:ip|hostname|host)[\s:=-]*(\b(?:\d{1,3}\.){3}\d{1,3}\b)[^\n\r]*[\n\r]+[^\n\r]*?(?:port|پورت)[\s:=-]*(\d{2,5})'
     
     sh_x_all_ips = set() 
@@ -389,8 +389,12 @@ def fetch_raw_configs():
                         if time_tag['datetime'].startswith(today_str):
                             msg_is_today = True
                     
+                    # 🔴 تغییر اول: اگر پیام برای امروز نیست، کلا بررسی نشود و بره پیام بعدی
+                    if not msg_is_today:
+                        continue
+                    
                     # 1. سایفون
-                    if ENABLE_PSIPHON and msg_is_today:
+                    if ENABLE_PSIPHON:
                         is_psiphon = any(keyword in text_lower for keyword in ['psiphon', 'سایفون', 'سايفون'])
                         if is_psiphon:
                             matches = re.findall(pattern_psiphon_multiline, text)
@@ -418,21 +422,19 @@ def fetch_raw_configs():
                             
                     # 4. آی‌پی‌های ش.خ 
                     if ENABLE_SH_X_IP and (channel in sh_x_channels):
-                        has_persian_keywords = 'شیر' in text and 'خورشید' in text
-                        has_english_keywords = 'shir' in text_lower and 'khorshid' in text_lower
-                        
                         raw_ips = list(set(re.findall(pattern_ip, text)))
+                        
+                        # تابع is_valid_public_ip دی‌ان‌اس‌ها و آی‌پی‌های نامعتبر رو فیلتر می‌کنه
                         valid_ips = [ip for ip in raw_ips if is_valid_public_ip(ip)]
                         
-                        has_configs = bool(re.findall(pattern_v2ray, text)) or bool(re.findall(pattern_tg, text))
-                        is_ip_list = len(valid_ips) >= 4 and not has_configs
-                        
-                        if has_persian_keywords or has_english_keywords or is_ip_list:
+                        # 🔴 تغییر دوم: اگر حداقل ۵ تا آی‌پی معتبر توی پست بود، همه‌شون رو ذخیره کن
+                        if len(valid_ips) >= 5:
                             for ip in valid_ips: sh_x_all_ips.add(ip)
 
         except Exception as e:
             print(f"Error fetching channel {channel}: {e}")
 
+    # لینک‌های ساب (subs) چون فایل‌های تکست هستن تاریخ ندارن، همون‌ها رو پردازش می‌کنه
     for sub in subs:
         try:
             response = requests.get(sub, headers=headers, timeout=15)
@@ -443,6 +445,7 @@ def fetch_raw_configs():
         except Exception: pass
             
     return list(v2ray_links), list(mtproto_links), list(sh_x_all_ips), list(psiphon_pairs)
+    
 
 def send_to_telegram(text, reply_markup=None):
     if SILENT_MODE: return 
