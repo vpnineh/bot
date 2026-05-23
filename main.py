@@ -602,9 +602,16 @@ def main():
             chunk_size = 150 
             for i in range(0, len(new_sh_x), chunk_size):
                 chunk = new_sh_x[i:i + chunk_size]
+                
+                # تو رفتگی این بخش اصلاح شد
                 msg = "<b>آی پی برنامه 🦁☀️</b>\n\n<blockquote expandable><code>\n"
                 msg += "\n".join(chunk)
                 msg += "\n</code></blockquote>\n\n"
+                msg += "در صورت عدم اتصال از CDN SNI های زیر استفاده نمایید :\n"
+                msg += "<code>www.google.com</code>\n"
+                msg += "<code>www.varzesh3.com</code>\n"
+                msg += "<code>www.snapp.ir</code>\n"
+                msg += "<code>www.hcaptcha.com</code>\n\n"
                 msg += f"⚙️ @{CHANNEL_ID}"
 
                 send_to_telegram(msg)
