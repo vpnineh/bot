@@ -20,3 +20,4 @@ kapsolvpn
 Outline_Vpn
 beshkan
 ShupTell_Gap
+ForiMarketGp
