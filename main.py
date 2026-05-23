@@ -629,7 +629,7 @@ def main():
     if valid_standard_v2ray:
         chunk, chunk_sub_links, current_char_count = [], [], 0
         bottom_text = "<b>⚙️ اختصاصی برای اینترنت ملی</b>\n\n" if ENABLE_PING_FILTER else "<b>💎 V2Ray Servers (Iran)</b>\n\n"
-        bottom_text += f"✅ <b>Join:</b> @{CHANNEL_ID}\n🌐 #v2ray #vless #vpn #config #کانفیگ\n"
+        bottom_text += f"🌐 #v2ray #vless #vpn #config #کانفیگ\n✅ @{CHANNEL_ID}\n"
         base_msg = f"<blockquote expandable><code>\n</code>\n</blockquote>\n\n{bottom_text}"
         max_allowed_chars = MAX_TELEGRAM_MSG_CHARS - len(base_msg)
         
