@@ -654,7 +654,7 @@ def main():
     if valid_standard_v2ray:
         chunk, chunk_sub_links, current_char_count = [], [], 0
         bottom_text = "<b>⚙️ اختصاصی برای اینترنت ملی</b>\n\n" if ENABLE_PING_FILTER else "<b>💎 V2Ray Servers (Iran)</b>\n\n"
-        bottom_text += f"🌐 #v2ray #vless #vpn #config #کانفیگ\n✅ @{CHANNEL_ID}\n"
+        bottom_text += f"✅ @{CHANNEL_ID}\n🌐 #v2ray #vpn #config #کانفیگ\n"
         base_msg = f"<blockquote expandable><code>\n</code>\n</blockquote>\n\n{bottom_text}"
         max_allowed_chars = MAX_TELEGRAM_MSG_CHARS - len(base_msg)
         
@@ -696,7 +696,7 @@ def main():
         for i in range(0, len(valid_tg_proxies), MTPROTO_CHUNK_SIZE):
             chunk = valid_tg_proxies[i:i + MTPROTO_CHUNK_SIZE]
             msg = "<b>🟢 Premium Telegram Proxies (نت ملی)</b>\n\n" if ENABLE_PING_FILTER else "<b>🛡 Premium Telegram Proxies</b>\n\n"
-            msg += f"🌐 #mtproto #socks5 #proxy\n✅ @{CHANNEL_ID}\n"
+            msg += f"✅ @{CHANNEL_ID}\n🌐 #mtproto #socks5 #proxy\n"
             
             inline_keyboard = []
             row = []
