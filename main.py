@@ -101,7 +101,6 @@ def extract_ip_port(config):
     return None, None
 
 def is_valid_host_ip(config):
-    # بررسی می‌کند که سرور کانفیگ/پروکسی لوکال هاست یا 0.0.0.0 نباشد
     host, _ = extract_ip_port(config)
     if not host: return True
     if host.lower() in ['127.0.0.1', '0.0.0.0', 'localhost']:
@@ -114,6 +113,22 @@ def is_valid_host_ip(config):
                 if p1 in [0, 127]: return False
             except: pass
     return True
+
+def is_valid_tg_link(config):
+    try:
+        parsed = urllib.parse.urlparse(config)
+        qs = urllib.parse.parse_qs(parsed.query)
+
+        if 'server' not in qs or 'port' not in qs:
+            return False
+
+        if 'proxy' in parsed.path or config.startswith('tg://proxy'):
+            if 'secret' not in qs:
+                return False
+
+        return True
+    except Exception:
+        return False
 
 def get_hash(text):
     text = text.strip()
@@ -252,6 +267,22 @@ def get_country_info(ip_or_host):
         pass
     return ""
 
+def get_flag(ip_or_host):
+    db_path = 'GeoLite2-Country.mmdb'
+    if not os.path.exists(db_path): return "🌍"
+    try:
+        if not re.match(r'\b(?:\d{1,3}\.){3}\d{1,3}\b', ip_or_host):
+            ip = socket.gethostbyname(ip_or_host)
+        else: ip = ip_or_host
+            
+        with geoip2.database.Reader(db_path) as reader:
+            iso = reader.country(ip).country.iso_code
+            if iso:
+                return chr(ord(iso[0]) + 127397) + chr(ord(iso[1]) + 127397)
+    except Exception:
+        pass
+    return "🌍"
+
 def is_internet_pro_config(config):
     try:
         host, port = extract_ip_port(config)
@@ -369,14 +400,13 @@ def fetch_raw_configs():
     channels, subs = load_sources()
     sh_x_channels = load_sh_x_channels() if ENABLE_SH_X_IP else []
     
-    v2ray_links, mtproto_links = set(), set()
+    v2ray_links, tg_proxies = set(), set()
     psiphon_pairs = set()
     
     pattern_v2ray = r'(?:vless|vmess|trojan|ss|ssr|tuic|hysteria2?)://[^\s"\'<>\n]+'
-    pattern_tg = r'(?:https?://t\.me/proxy\?[^\s"\'<>\n]+|tg://proxy\?[^\s"\'<>\n]+)'
-    pattern_ip = r'\b(?:\d{1,3}\.){3}\d{1,3}\b'
+    pattern_tg = r'(?:https?://t\.me/(?:proxy|socks)\?[^\s"\'<>\n]+|tg://(?:proxy|socks)\?[^\s"\'<>\n]+)'
     
-    # الگوی استخراج سایفون: آی‌پی و پورت حتماً باید در دو خط مجزا باشند
+    pattern_ip = r'\b(?:\d{1,3}\.){3}\d{1,3}\b'
     pattern_psiphon_multiline = r'(?i)(?:ip|hostname|host)[\s:=-]*(\b(?:\d{1,3}\.){3}\d{1,3}\b)[^\n\r]*[\n\r]+[^\n\r]*?(?:port|پورت)[\s:=-]*(\d{2,5})'
     
     sh_x_all_ips = set() 
@@ -428,22 +458,20 @@ def fetch_raw_configs():
                                     for c in re.findall(pattern_v2ray, href):
                                         if is_valid_host_ip(c): v2ray_links.add(c)
                                     
-                    # 3. MTProto
+                    # 3. Telegram Proxies
                     for c in re.findall(pattern_tg, text):
-                        if is_valid_host_ip(c): mtproto_links.add(c)
+                        if is_valid_host_ip(c) and is_valid_tg_link(c): tg_proxies.add(c)
                     if msg_text_div:
                         for a_tag in msg_text_div.find_all('a'):
                             href = a_tag.get('href')
                             if href:
                                 for c in re.findall(pattern_tg, href):
-                                    if is_valid_host_ip(c): mtproto_links.add(c)
+                                    if is_valid_host_ip(c) and is_valid_tg_link(c): tg_proxies.add(c)
                             
                     # 4. آی‌پی‌های ش.خ 
                     if ENABLE_SH_X_IP and (channel in sh_x_channels):
                         raw_ips = list(set(re.findall(pattern_ip, text)))
-                        
                         valid_ips = [ip for ip in raw_ips if is_valid_public_ip(ip)]
-                        
                         if len(valid_ips) >= 5:
                             for ip in valid_ips: sh_x_all_ips.add(ip)
 
@@ -458,10 +486,10 @@ def fetch_raw_configs():
                 for c in re.findall(pattern_v2ray, decoded_text):
                     if is_valid_host_ip(c): v2ray_links.add(c)
                 for c in re.findall(pattern_tg, decoded_text):
-                    if is_valid_host_ip(c): mtproto_links.add(c)
+                    if is_valid_host_ip(c) and is_valid_tg_link(c): tg_proxies.add(c)
         except Exception: pass
             
-    return list(v2ray_links), list(mtproto_links), list(sh_x_all_ips), list(psiphon_pairs)
+    return list(v2ray_links), list(tg_proxies), list(sh_x_all_ips), list(psiphon_pairs)
     
 
 def send_to_telegram(text, reply_markup=None):
@@ -494,11 +522,11 @@ def main():
     sub_counter = load_sub_counter() 
     
     print("⏳ در حال جمع‌آوری اطلاعات از کانال‌ها...")
-    new_v2ray, new_mtproto, sh_x_all_ips, psiphon_pairs = fetch_raw_configs()
+    new_v2ray, new_tg_proxies, sh_x_all_ips, psiphon_pairs = fetch_raw_configs()
 
     print("\n================ گزارش جستجوی خام ================")
     print(f"🔍 مجموع V2Ray پیدا شده: {len(new_v2ray)}")
-    print(f"🔍 مجموع MTProto پیدا شده: {len(new_mtproto)}")
+    print(f"🔍 مجموع Telegram Proxies پیدا شده: {len(new_tg_proxies)}")
     print(f"🔍 مجموع آی‌پی‌های ش.خ: {len(sh_x_all_ips)}")
     print(f"🔍 مجموع سرورهای سایفون (امروز): {len(psiphon_pairs)}")
     print("==================================================\n")
@@ -524,20 +552,20 @@ def main():
                 print(f"📤 Sent {len(chunk)} Psiphon configs to Telegram.")
                 time.sleep(DELAY_BETWEEN_MSGS)
 
-    unique_v2ray, unique_mtproto = [], []
+    unique_v2ray, unique_tg_proxies = [], []
     for link in new_v2ray:
         link_hash = get_hash(link)
         if link_hash not in history:
             unique_v2ray.append(link)
             history[link_hash] = None
             
-    for link in new_mtproto:
+    for link in new_tg_proxies:
         link_hash = get_hash(link)
         if link_hash not in history:
-            unique_mtproto.append(link)
+            unique_tg_proxies.append(link)
             history[link_hash] = None
 
-    print(f"✅ پس از بررسی تاریخچه: {len(unique_v2ray)} V2Ray و {len(unique_mtproto)} MTProto کاملاً جدید هستند.")
+    print(f"✅ پس از بررسی تاریخچه: {len(unique_v2ray)} V2Ray و {len(unique_tg_proxies)} Telegram Proxies کاملاً جدید هستند.")
 
     raw_pro_v2ray, standard_v2ray = [], []
     for config in unique_v2ray:
@@ -553,11 +581,10 @@ def main():
         print("⏳ در حال پینگ گرفتن و تست سرورها...")
         valid_standard_v2ray = filter_no_ping_configs(valid_standard_v2ray)
         
-        # ابتدا فیلتر لوکیشن ایران اعمال می‌شود، سپس تست پینگ
-        iran_mtproto = filter_iran_configs(unique_mtproto)
-        valid_mtproto = filter_no_ping_configs(iran_mtproto)
+        iran_tg_proxies = filter_iran_configs(unique_tg_proxies)
+        valid_tg_proxies = filter_no_ping_configs(iran_tg_proxies)
     else:
-        valid_mtproto = unique_mtproto
+        valid_tg_proxies = unique_tg_proxies
 
     total_sent = 0
     
@@ -580,9 +607,7 @@ def main():
                 msg += "\n</code></blockquote>\n\n"
                 msg += f"⚙️ @{CHANNEL_ID}"
 
-                # ارسال پیام بدون دکمه شیشه‌ای
                 send_to_telegram(msg)
-                
                 print(f"📤 Sent {len(chunk)} New Sh_X IPs to Telegram.")
                 time.sleep(DELAY_BETWEEN_MSGS)
 
@@ -667,16 +692,22 @@ def main():
             
         if chunk: send_std_batch(chunk, chunk_sub_links)
 
-    if ENABLE_MTPROTO and valid_mtproto:
-        for i in range(0, len(valid_mtproto), MTPROTO_CHUNK_SIZE):
-            chunk = valid_mtproto[i:i + MTPROTO_CHUNK_SIZE]
-            msg = "<b>🟢 Premium MTProto Proxies (نت ملی)</b>\n\n" if ENABLE_PING_FILTER else "<b>🛡 Premium MTProto Proxies</b>\n\n"
-            msg += f"🌐 #mtproto #proxy\n✅ @{CHANNEL_ID}\n"
+    if ENABLE_MTPROTO and valid_tg_proxies:
+        for i in range(0, len(valid_tg_proxies), MTPROTO_CHUNK_SIZE):
+            chunk = valid_tg_proxies[i:i + MTPROTO_CHUNK_SIZE]
+            msg = "<b>🟢 Premium Telegram Proxies (نت ملی)</b>\n\n" if ENABLE_PING_FILTER else "<b>🛡 Premium Telegram Proxies</b>\n\n"
+            msg += f"🌐 #mtproto #socks5 #proxy\n✅ @{CHANNEL_ID}\n"
             
             inline_keyboard = []
             row = []
             for idx, link in enumerate(chunk, 1):
-                row.append({"text": f"Connect", "url": link})
+                # گرفتن هاست از لینک پروکسی برای پیدا کردن پرچم
+                host, _ = extract_ip_port(link)
+                flag_emoji = get_flag(host) if host else "🌍"
+                
+                # اضافه کردن پرچم به دکمه
+                row.append({"text": f"Connect {flag_emoji}", "url": link})
+                
                 if len(row) == 2: 
                     inline_keyboard.append(row)
                     row = []
@@ -685,7 +716,7 @@ def main():
             reply_markup = {"inline_keyboard": inline_keyboard}
             send_to_telegram(msg, reply_markup=reply_markup)
             total_sent += len(chunk)
-            print(f"📤 Sent {len(chunk)} MTProto proxies to Telegram.")
+            print(f"📤 Sent {len(chunk)} Telegram proxies to Telegram.")
             time.sleep(DELAY_BETWEEN_MSGS)
     
     if not SILENT_MODE: save_sub_counter(sub_counter)
@@ -700,3 +731,4 @@ if __name__ == '__main__':
     main()
 
 # فیلتر 127.0.0.1 و ... به کانفیگ و پروکسی ها اضافه شد
+# فیلتر اعتبار سنجی پروکسی - ساکس ۵ - پرجم کشور مبدا جلوی دکمه کانکت اضافه شد
