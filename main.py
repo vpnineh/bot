@@ -671,7 +671,7 @@ def main():
         for i in range(0, len(valid_mtproto), MTPROTO_CHUNK_SIZE):
             chunk = valid_mtproto[i:i + MTPROTO_CHUNK_SIZE]
             msg = "<b>🟢 Premium MTProto Proxies (نت ملی)</b>\n\n" if ENABLE_PING_FILTER else "<b>🛡 Premium MTProto Proxies</b>\n\n"
-            msg += f"✅ @{CHANNEL_ID}\n🌐 #mtproto #proxy\n"
+            msg += f"🌐 #mtproto #proxy\n✅ @{CHANNEL_ID}\n"
             
             inline_keyboard = []
             row = []
