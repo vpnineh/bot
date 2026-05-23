@@ -21,3 +21,4 @@ Outline_Vpn
 beshkan
 ShupTell_Gap
 ForiMarketGp
+V2rayEnglishGP
