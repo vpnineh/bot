@@ -36,3 +36,4 @@ free1_vpn
 ShupTell_Gap
 ForiMarketGp
 VPN_iransaz
+V2rayEnglishGP
