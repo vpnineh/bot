@@ -552,7 +552,10 @@ def main():
     if ENABLE_PING_FILTER:
         print("⏳ در حال پینگ گرفتن و تست سرورها...")
         valid_standard_v2ray = filter_no_ping_configs(valid_standard_v2ray)
-        valid_mtproto = filter_no_ping_configs(unique_mtproto)
+        
+        # ابتدا فیلتر لوکیشن ایران اعمال می‌شود، سپس تست پینگ
+        iran_mtproto = filter_iran_configs(unique_mtproto)
+        valid_mtproto = filter_no_ping_configs(iran_mtproto)
     else:
         valid_mtproto = unique_mtproto
 
