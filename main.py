@@ -9,6 +9,7 @@ import html
 import socket
 import concurrent.futures
 import hashlib
+import random
 from bs4 import BeautifulSoup
 import geoip2.database
 from datetime import datetime
@@ -633,7 +634,8 @@ def main():
             sub_content = '\n'.join(sub_links)
             sub_b64 = base64.b64encode(sub_content.encode('utf-8')).decode('utf-8')
             
-            reply_markup = {"inline_keyboard": [[{"text": "🔗 کپی لینک ساب کانفیگ", "copy_text": {"text": sub_url}, "style": "success"}]]}
+            button_style = random.choice(["primary", "success", "danger"])
+            reply_markup = {"inline_keyboard": [[{"text": "🔗 کپی لینک ساب کانفیگ", "copy_text": {"text": sub_url}, "style": button_style}]]}
             
             if upload_sub_to_github(sub_filename, sub_b64):
                 send_to_telegram(msg, reply_markup=reply_markup)
@@ -674,7 +676,8 @@ def main():
             sub_content = '\n'.join(sub_links)
             sub_b64 = base64.b64encode(sub_content.encode('utf-8')).decode('utf-8')
             
-            reply_markup = {"inline_keyboard": [[{"text": "🔗 کپی لینک ساب کانفیگ", "copy_text": {"text": sub_url}, "style": "success"}]]}
+            button_style = random.choice(["primary", "success", "danger"])
+            reply_markup = {"inline_keyboard": [[{"text": "🔗 کپی لینک ساب کانفیگ", "copy_text": {"text": sub_url}, "style": button_style}]]}
             
             if upload_sub_to_github(sub_filename, sub_b64):
                 send_to_telegram(msg, reply_markup=reply_markup)
