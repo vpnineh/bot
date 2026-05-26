@@ -634,8 +634,7 @@ def main():
             sub_content = '\n'.join(sub_links)
             sub_b64 = base64.b64encode(sub_content.encode('utf-8')).decode('utf-8')
             
-            button_style = random.choice(["primary", "success"])
-            reply_markup = {"inline_keyboard": [[{"text": "🔗 کپی لینک ساب کانفیگ", "copy_text": {"text": sub_url}, "style": button_style}]]}
+            reply_markup = {"inline_keyboard": [[{"text": "🔗 کپی لینک ساب کانفیگ", "copy_text": {"text": sub_url}, "style": "success"}]]}
             
             if upload_sub_to_github(sub_filename, sub_b64):
                 send_to_telegram(msg, reply_markup=reply_markup)
@@ -676,8 +675,7 @@ def main():
             sub_content = '\n'.join(sub_links)
             sub_b64 = base64.b64encode(sub_content.encode('utf-8')).decode('utf-8')
             
-            button_style = random.choice(["primary", "success"])
-            reply_markup = {"inline_keyboard": [[{"text": "🔗 کپی لینک ساب کانفیگ", "copy_text": {"text": sub_url}, "style": button_style}]]}
+            reply_markup = {"inline_keyboard": [[{"text": "🔗 کپی لینک ساب کانفیگ", "copy_text": {"text": sub_url}, "style": "success"}]]}
             
             if upload_sub_to_github(sub_filename, sub_b64):
                 send_to_telegram(msg, reply_markup=reply_markup)
