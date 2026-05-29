@@ -29,7 +29,7 @@ ENABLE_INTERNET_PRO = False
 ENABLE_MTPROTO = True         
 ENABLE_SH_X_IP = True         
 ENABLE_PSIPHON = True         
-ENABLE_PING_FILTER = True
+ENABLE_PING_FILTER = False
 PING_TIMEOUT = 2.0
 
 BOT_TOKEN = os.environ.get('BOT_TOKEN')
