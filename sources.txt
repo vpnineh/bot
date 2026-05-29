@@ -2,6 +2,7 @@ https://raw.githubusercontent.com/vpnineh/clash/refs/heads/main/sub/sub
 AR14N24B
 oneclickvpnkeys
 persianvpnhub
+Va3lSho
 #moftconfig
 #v2ray_configs_pool
 #https://raw.githubusercontent.com/therealaleph/Iran-configs/refs/heads/main/ir_configs.txt
