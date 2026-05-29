@@ -25,11 +25,12 @@ DELAY_BETWEEN_MSGS = 10
 SILENT_MODE = False  
 
 # ================= کلیدهای مدیریت آپشن‌ها =================
+WARMODE = False               # اضافه شدن کلید WARMODE
 ENABLE_INTERNET_PRO = False   
 ENABLE_MTPROTO = True         
 ENABLE_SH_X_IP = True         
 ENABLE_PSIPHON = True         
-ENABLE_PING_FILTER = False
+ENABLE_PING_FILTER = True
 PING_TIMEOUT = 2.0
 
 BOT_TOKEN = os.environ.get('BOT_TOKEN')
@@ -325,6 +326,14 @@ def filter_no_ping_configs(configs):
             if not has_ping: selected.append(config)
     return selected
 
+def filter_has_ping_configs(configs):
+    selected = []
+    with concurrent.futures.ThreadPoolExecutor(max_workers=60) as executor:
+        results = executor.map(lambda c: (c, check_ping(c)), configs)
+        for config, has_ping in results:
+            if has_ping: selected.append(config)
+    return selected
+
 def filter_pro_configs(configs):
     selected_pro = []
     valid_dcs = ['ovh', 'hetzner', 'digitalocean', 'linode', 'amazon', 'google', 'microsoft', 
@@ -576,16 +585,25 @@ def main():
             standard_v2ray.append(config)
 
     valid_pro_v2ray = filter_pro_configs(raw_pro_v2ray) if ENABLE_INTERNET_PRO else []
-    valid_standard_v2ray = filter_iran_configs(standard_v2ray)
-
-    if ENABLE_PING_FILTER:
-        print("⏳ در حال پینگ گرفتن و تست سرورها...")
-        valid_standard_v2ray = filter_no_ping_configs(valid_standard_v2ray)
-        
+    
+    # 🔴 منطقه اعمال فیلترهای WARMODE و PING
+    if WARMODE:
+        print("⏳ حالت WARMODE (روشن): اعمال فیلتر فقط ایران و بدون پینگ (تایم‌اوت)...")
+        # فیلتر برای V2ray
+        valid_standard_v2ray_iran = filter_iran_configs(standard_v2ray)
+        valid_standard_v2ray = filter_no_ping_configs(valid_standard_v2ray_iran)
+        # فیلتر برای MTProto
         iran_tg_proxies = filter_iran_configs(unique_tg_proxies)
         valid_tg_proxies = filter_no_ping_configs(iran_tg_proxies)
     else:
-        valid_tg_proxies = unique_tg_proxies
+        print("⏳ حالت WARMODE (خاموش): بررسی تمام کشورها...")
+        if ENABLE_PING_FILTER:
+            print("⏳ در حال تست سرورها (فقط پینگ‌های مثبت)...")
+            valid_standard_v2ray = filter_has_ping_configs(standard_v2ray)
+            valid_tg_proxies = filter_has_ping_configs(unique_tg_proxies)
+        else:
+            valid_standard_v2ray = standard_v2ray
+            valid_tg_proxies = unique_tg_proxies
 
     total_sent = 0
     
@@ -604,7 +622,6 @@ def main():
             for i in range(0, len(new_sh_x), chunk_size):
                 chunk = new_sh_x[i:i + chunk_size]
                 
-                # تو رفتگی این بخش اصلاح شد
                 msg = "<b>آی پی برنامه 🦁☀️</b>\n\n<blockquote expandable><code>\n"
                 msg += "\n".join(chunk)
                 msg += "\n</code></blockquote>\n\n"
@@ -661,7 +678,12 @@ def main():
 
     if valid_standard_v2ray:
         chunk, chunk_sub_links, current_char_count = [], [], 0
-        bottom_text = "<b>⚙️ اختصاصی برای اینترنت ملی</b>\n\n" if ENABLE_PING_FILTER else "<b>💎 V2Ray Servers (Iran)</b>\n\n"
+        
+        if WARMODE:
+            bottom_text = "<b>⚙️ اختصاصی برای اینترنت ملی (بدون پینگ)</b>\n\n"
+        else:
+            bottom_text = "<b>💎 V2Ray Servers (Global)</b>\n\n"
+            
         bottom_text += f"✅ @{CHANNEL_ID}\n🌐 #v2ray #vpn #config #کانفیگ\n"
         base_msg = f"<blockquote expandable><code>\n</code>\n</blockquote>\n\n{bottom_text}"
         max_allowed_chars = MAX_TELEGRAM_MSG_CHARS - len(base_msg)
@@ -703,17 +725,20 @@ def main():
     if ENABLE_MTPROTO and valid_tg_proxies:
         for i in range(0, len(valid_tg_proxies), MTPROTO_CHUNK_SIZE):
             chunk = valid_tg_proxies[i:i + MTPROTO_CHUNK_SIZE]
-            msg = "<b>🟢 Premium Telegram Proxies (نت ملی)</b>\n\n" if ENABLE_PING_FILTER else "<b>🛡 Premium Telegram Proxies</b>\n\n"
+            
+            if WARMODE:
+                msg = "<b>🟢 Premium Telegram Proxies (نت ملی)</b>\n\n" 
+            else:
+                msg = "<b>🛡 Premium Telegram Proxies (Global)</b>\n\n"
+                
             msg += f"✅ @{CHANNEL_ID}\n🌐 #mtproto #socks5 #proxy\n"
             
             inline_keyboard = []
             row = []
             for idx, link in enumerate(chunk, 1):
-                # گرفتن هاست از لینک پروکسی برای پیدا کردن پرچم
                 host, _ = extract_ip_port(link)
                 flag_emoji = get_flag(host) if host else "🌍"
                 
-                # اضافه کردن پرچم به دکمه
                 row.append({"text": f"Connect {flag_emoji}", "url": link})
                 
                 if len(row) == 2: 
@@ -737,6 +762,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-
-# فیلتر 127.0.0.1 و ... به کانفیگ و پروکسی ها اضافه شد
-# فیلتر اعتبار سنجی پروکسی - ساکس ۵ - پرجم کشور مبدا جلوی دکمه کانکت اضافه شد
