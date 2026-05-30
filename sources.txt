@@ -1,7 +1,7 @@
 https://raw.githubusercontent.com/vpnineh/clash/refs/heads/main/sub/sub
 AR14N24B
 #oneclickvpnkeys
-persianvpnhub
+#persianvpnhub
 Va3lSho
 #moftconfig
 #v2ray_configs_pool
